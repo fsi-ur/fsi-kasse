@@ -1,5 +1,5 @@
 {
-  "name": "kassensystem",
+  "name": "nuxt-app",
   "type": "module",
   "private": true,
   "scripts": {
@@ -10,8 +10,29 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-    "nuxt": "^4.2.1",
-    "vue": "^3.5.25",
-    "vue-router": "^4.6.3"
+    "@tailwindcss/vite": "^4.1.13",
+    "@vite-pwa/nuxt": "^1.0.4",
+    "bcrypt": "^6.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mariadb": "^3.4.5",
+    "nuxt": "^4.0.3",
+    "tailwindcss": "^4.1.17",
+    "vue": "^3.5.20",
+    "vue-router": "^4.5.1"
+  },
+  "overrides": {
+    "ansi-regex": "^6.0.1",
+    "ansi-styles": "^6.2.1",
+    "color-name": "^1.1.4",
+    "supports-color": "^9.0.0",
+    "strip-ansi": "^7.1.0",
+    "string-width": "^5.1.2",
+    "wrap-ansi": "^9.0.0",
+    "cliui": "^8.0.1",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/jsonwebtoken": "^9.0.10"
   }
 }
