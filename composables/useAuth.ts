@@ -1,28 +1,62 @@
-export type UserRole = 'guest' | 'user' | 'admin'
+interface User {
+  id: number
+  username: string
+  role: string
+}
 
-export interface User {
-  name: string
-  role: UserRole
+interface SessionResponse {
+  ok: boolean
+  user?: User
+}
+
+interface LoginResponse {
+  ok: boolean
+  error?: string
 }
 
 export const useAuth = () => {
-  const user = useState<User | null>('user', () => null)
+  const user = useState<User | null>('auth_user', () => null)
 
-  const login = (name: string, role: UserRole) => {
-    user.value = { name, role }
+  async function fetchSession() {
+    try {
+      const data = await $fetch<SessionResponse>('/api/auth/session')
+      if (data?.ok) {
+        user.value = data.user!
+        return user.value
+      } else {
+        user.value = null
+        return null
+      }
+    } catch (err: any) {
+      user.value = null
+      return null
+    }
   }
 
-  const logout = () => {
+  async function login(username: string, password: string) {
+    const res = await $fetch<LoginResponse>('/api/auth/login', {
+      method: 'POST',
+      body: { username, password }
+    })
+
+    if (res.ok) {
+      await fetchSession()
+      return { ok: true }
+    }
+
+    return res
+  }
+
+  async function logout() {
+    await $fetch('/api/auth/logout', { method: 'POST' })
     user.value = null
   }
 
-  const isLoggedIn = () => !!user.value
-
-  const hasRole = (role: UserRole | UserRole[]) => {
+  function hasRole(roles: string[] | string) {
     if (!user.value) return false
-    if (Array.isArray(role)) return role.includes(user.value.role)
-    return user.value.role === role
+    if (Array.isArray(roles)) return roles.includes(user.value.role)
+    return user.value.role === roles
   }
-
-  return { user, login, logout, isLoggedIn, hasRole }
+  
+  return { user, fetchSession, login, logout, hasRole }
 }

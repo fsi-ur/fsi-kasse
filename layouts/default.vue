@@ -9,15 +9,26 @@
 </template>
 
 <script setup lang="ts">
-import { useAuth, type UserRole } from '~/composables/useAuth'
+import { useAuth } from '~/composables/useAuth'
 
-const { hasRole } = useAuth()
+const { user, fetchSession } = useAuth()
 
 const menuItems = [
-  { name: 'Home', label: 'Home', icon: '/icons/home.svg', roles: ['guest' as UserRole, 'user' as UserRole, 'admin' as UserRole] },
-  { name: 'About', label: 'About', icon: '/icons/about.svg', roles: ['guest' as UserRole, 'user' as UserRole, 'admin' as UserRole] },
-  { name: 'Admin', label: 'Admin', icon: '/icons/settings.svg', roles: ['admin' as UserRole] }
+  { name: 'Home', label: 'Home', icon: '/icon-home.svg', roles: ['user', 'admin'] },
+  { name: 'About', label: 'About', icon: '/icon-settings.svg', roles: ['user', 'admin'] },
+  { name: 'Admin', label: 'Admin', icon: '/icon-settings.svg', roles: ['admin'] },
+  { name: 'Login', label: 'Login', icon: '/icon-settings.svg', roles: ['guest'] },
 ]
 
-const filteredMenuItems = menuItems.filter(item => hasRole(item.roles))
+const filteredMenuItems = computed(() => {
+  return menuItems.filter(it => {
+    if (it.roles.includes('guest')) return !user.value
+    if (!user.value) return false
+    return it.roles.includes(user.value.role)
+  })
+})
+
+onMounted(() => {
+  fetchSession()
+})
 </script>
