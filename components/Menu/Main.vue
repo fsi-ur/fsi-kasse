@@ -11,7 +11,7 @@
           :class="[
             'w-12 h-12 flex items-center justify-center rounded-full transition-colors',
             item.name === currentPage
-              ? 'bg-blue-600 text-white'
+              ? 'bg-cyan-600 text-white'
               : 'bg-gray-800 text-gray-400'
           ]"
         >
