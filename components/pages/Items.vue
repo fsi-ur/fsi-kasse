@@ -1,0 +1,93 @@
+<template>
+  <div class="p-6">
+    <h1 class="text-2xl font-bold mb-4">Item Management</h1>
+    <div class="mb-8 p-4 bg-white shadow-lg rounded-xl flex gap-4 items-end">
+      <div>
+        <label class="block mb-1 text-md">Item Name</label>
+        <input v-model="newItem.name" class="w-full p-2 rounded-md bg-gray-100 outline outline-gray-300" />
+      </div>
+      <div>
+        <label class="block mb-1 text-md">Price</label>
+        <input v-model="newItem.price" type="number" step="0.01" class="w-full p-2 rounded-md bg-gray-100 outline outline-gray-300" />
+      </div>
+
+      <button 
+        @click="addItem"
+        class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-md text-white cursor-pointer"
+      >
+        Add
+      </button>
+    </div>
+
+    <div class="bg-white p-4 rounded-xl shadow-lg">
+      <h2 class="text-xl font-semibold mb-4">All Items</h2>
+      <table class="w-full">
+        <thead>
+          <tr class="border-b border-gray-600">
+            <th class="text-left pb-2">Name</th>
+            <th class="text-left pb-2">Price</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr 
+            v-for="item in items" 
+            :key="item.id"
+            class="border-b border-gray-700"
+          >
+            <td class="py-2">{{ item.name }}</td>
+            <td class="py-2">{{ item.price }} €</td>
+            <td class="py-2 text-right">
+              <button 
+                @click="deleteItem(item.id)"
+                class="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-md text-white cursor-pointer"
+              >
+                Delete
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+
+const items = ref<any[]>([])
+const newItem = ref({
+  name: '',
+  price: ''
+})
+
+async function loadItems() {
+  const res = await $fetch('/api/items', { method: 'GET' })
+  if (res.ok) {
+    items.value = 'items' in res ? res.items as any[] : []
+  }
+}
+
+async function addItem() {
+  if (!newItem.value.name || !newItem.value.price) return
+
+  await $fetch('/api/items/create', {
+    method: 'POST',
+    body: newItem.value
+  })
+
+  newItem.value = { name: '', price: '' }
+  await loadItems()
+}
+
+async function deleteItem(id: number) {
+  await $fetch('/api/items/delete', {
+    method: 'POST',
+    body: { id }
+  })
+
+  await loadItems()
+}
+
+onMounted(loadItems)
+</script>

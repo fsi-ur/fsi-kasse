@@ -1,29 +1,29 @@
 <template>
   <div class="p-6">
     <h1 class="text-2xl font-bold mb-4">User Management</h1>
-    <div class="mb-8 p-4 bg-white shadow rounded-xl">
+    <div class="mb-8 p-4 bg-white shadow-lg rounded-xl">
       <h2 class="text-xl font-semibold mb-2">Create New User</h2>
       <div class="flex flex-col gap-2 max-w-sm">
         <input
           v-model="newUsername"
           placeholder="New Username"
-          class="border p-2 rounded"
+          class="outline outline-gray-300 bg-gray-100 p-2 rounded-md"
           autocomplete="new-username"
         />
         <input
           v-model="newPassword"
           placeholder="New Password"
           type="password"
-          class="border p-2 rounded"
+          class="outline outline-gray-300 bg-gray-100 p-2 rounded-md"
           autocomplete="new-password"
         />
-        <select v-model="role" class="border p-2 rounded">
+        <select v-model="role" class="outline outline-gray-300 bg-gray-100 p-2 rounded-md">
           <option value="user">User</option>
           <option value="admin">Admin</option>
         </select>
         <button
           @click="registerUser"
-          class="bg-blue-600 text-white px-3 py-2 rounded"
+          class="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-2 rounded-md cursor-pointer"
         >
           Create User
         </button>
@@ -33,7 +33,7 @@
       </div>
     </div>
 
-    <div class="p-4 bg-white shadow rounded-xl">
+    <div class="p-4 bg-white shadow-lg rounded-xl">
       <h2 class="text-xl font-semibold mb-4">All Users</h2>
       <table class="w-full border-collapse">
         <thead>

@@ -8,9 +8,9 @@
 import { usePage } from '~/composables/usePage'
 import { useAuth } from '~/composables/useAuth'
 
-import HomePage from '~/components/pages/Home.vue'
+import CheckoutPage from '~/components/pages/Checkout.vue'
 import AboutPage from '~/components/pages/About.vue'
-import AdminPage from '~/components/pages/Admin.vue'
+import ItemsPage from '~/components/pages/Items.vue'
 import LoginPage from '~/components/pages/Login.vue'
 import UsersPage from '~/components/pages/Users.vue'
 
@@ -23,9 +23,9 @@ interface Page {
 }
 
 const pages: Record<string, Page> = {
-  Home: { component: HomePage, allowedRoles: ['user', 'admin'] },
+  Checkout: { component: CheckoutPage, allowedRoles: ['user', 'admin'] },
   About: { component: AboutPage, allowedRoles: ['user', 'admin'] },
-  Admin: { component: AdminPage, allowedRoles: ['admin'] },
+  Items: { component: ItemsPage, allowedRoles: ['admin'] },
   Login: { component: LoginPage, allowedRoles: ['guest'] },
   Users: { component: UsersPage, allowedRoles: ['admin'] },
 }
@@ -44,8 +44,8 @@ onMounted(async () => {
 const currentComponent = computed(() => {
   const page = pages[currentPage.value]
   if (!user.value) return LoginPage
-  if (!page) return HomePage
-  
+  if (!page) return CheckoutPage
+
   if (page.allowedRoles.includes('guest')) return page.component
 
   if (page.allowedRoles.includes(user.value.role)) return page.component

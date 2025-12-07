@@ -1,5 +1,5 @@
 export const usePage = () => {
-  const currentPage = useState<string>('currentPage', () => 'Home')
+  const currentPage = useState<string>('currentPage', () => 'Checkout')
 
   const { user } = useAuth()
 
