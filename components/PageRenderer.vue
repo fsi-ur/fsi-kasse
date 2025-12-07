@@ -11,8 +11,9 @@ import { useAuth } from '~/composables/useAuth'
 import CheckoutPage from '~/components/pages/Checkout.vue'
 import AboutPage from '~/components/pages/About.vue'
 import ItemsPage from '~/components/pages/Items.vue'
-import LoginPage from '~/components/pages/Login.vue'
+import CashiersPage from '~/components/pages/Cashiers.vue'
 import UsersPage from '~/components/pages/Users.vue'
+import LoginPage from '~/components/pages/Login.vue'
 
 const { currentPage } = usePage()
 const { user, fetchSession } = useAuth()
@@ -26,8 +27,9 @@ const pages: Record<string, Page> = {
   Checkout: { component: CheckoutPage, allowedRoles: ['user', 'admin'] },
   About: { component: AboutPage, allowedRoles: ['user', 'admin'] },
   Items: { component: ItemsPage, allowedRoles: ['admin'] },
-  Login: { component: LoginPage, allowedRoles: ['guest'] },
+  Cashiers: { component: CashiersPage, allowedRoles: ['admin'] },
   Users: { component: UsersPage, allowedRoles: ['admin'] },
+  Login: { component: LoginPage, allowedRoles: ['guest'] },
 }
 
 const loaded = ref(false)
