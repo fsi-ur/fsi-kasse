@@ -1,7 +1,7 @@
 import { defineEventHandler, readBody, setCookie } from 'h3'
 import { query } from '~/server/utils/db'
 import { makeToken, createSession, comparePassword } from '~/server/utils/auth'
-import { normalizeRow } from '~/server/utils/normalize'
+import { normalizeBigInt } from '~/server/utils/normalize'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
 
   const rows: any = await query('SELECT * FROM users WHERE username = ? LIMIT 1', [username])
 
-  const user = normalizeRow(rows && rows[0])
+  const user = normalizeBigInt(rows && rows[0])
 
   if (!user) {
     return { ok: false, error: 'Invalid username or password' }

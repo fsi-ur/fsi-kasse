@@ -1,5 +1,6 @@
 import { getCookie } from 'h3'
 import { getSessionByToken, touchSession, inactivityMinutes, deleteSessionByToken } from './auth'
+import { normalizeBigInt } from '~/server/utils/normalize'
 
 export async function getCurrentUserFromEvent(event: any, { touch }: { touch: boolean }) {
   const cookieName = process.env.SESSION_COOKIE_NAME || 'app_session'
@@ -8,7 +9,7 @@ export async function getCurrentUserFromEvent(event: any, { touch }: { touch: bo
 
   if (!token) return { ok: false }
 
-  const session = normalizeRow(await getSessionByToken(token))
+  const session = normalizeBigInt(await getSessionByToken(token))
   if (!session) return { ok: false }
 
   const now = new Date()
