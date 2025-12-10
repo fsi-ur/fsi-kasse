@@ -102,10 +102,16 @@ const showConfirm = ref(false)
 
 onMounted(async () => {
   const res1 = await $fetch('/api/items', { method: 'GET' })
-  if (res1.ok) items.value = 'items' in res1 ? res1.items as any[] : []
+  if (res1.ok) { 
+    const allItems = 'items' in res1 ? res1.items as any[] : []
+    items.value = allItems.filter(i => i.is_active === 1 || i.is_active === true)
+  }
 
   const res2 = await $fetch('/api/cashiers', { method: 'GET' })
-  if (res2.ok) cashiers.value = 'cashiers' in res2 ? res2.cashiers as any[] : []
+  if (res2.ok) {
+    const allCashiers = 'cashiers' in res2 ? res2.cashiers as any[] : []
+    cashiers.value = allCashiers.filter(i => i.is_active === 1 || i.is_active === true)
+  }
 })
 
 function addToOrder(item: any) {

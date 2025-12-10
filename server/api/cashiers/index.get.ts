@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
   if (!user) return { ok: false, error: 'Not authenticated' }
 
   const rows = await query(`
-    SELECT id, name, image 
+    SELECT id, name, image, is_active
     FROM cashiers 
     ORDER BY name ASC
   `)

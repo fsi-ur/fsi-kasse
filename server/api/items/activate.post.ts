@@ -7,9 +7,10 @@ export default defineEventHandler(async (event) => {
   if (!user) return { ok: false, error: 'Not authenticated' }
   if (user.role !== 'admin') return { ok: false, error: 'Not authorized' }
 
-  const { name, image, is_active = 1 } = await readBody(event)
-  if (!name) return { ok: false, error: 'Missing fields' }
+  const { id, is_active } = await readBody(event)
+  if (id == undefined || is_active == undefined) return { ok: false, error: 'Missing fields' }
+  if (is_active != 0 && is_active != 1) return { ok: false, error: 'Illegal value for is_active'}
 
-  await query(`INSERT INTO cashiers (name, image, is_active) VALUES (?, ?, ?)`, [name, image, is_active])
+  await query(`UPDATE items SET is_active = ? WHERE id = ?`, [is_active, id])
   return { ok: true }
 })

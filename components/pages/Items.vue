@@ -26,6 +26,7 @@
           <tr class="border-b border-gray-600">
             <th class="text-left pb-2">Name</th>
             <th class="text-left pb-2">Price</th>
+            <th class="text-left pb-2">Active</th>
           </tr>
         </thead>
 
@@ -37,6 +38,19 @@
           >
             <td class="py-2">{{ item.name }}</td>
             <td class="py-2">{{ item.price }} €</td>
+            <td class="p-2">
+              <span :class="item.is_active ? 'text-green-600' : 'text-red-600'">
+                {{ item.is_active ? 'Yes' : 'No' }}
+              </span>
+            </td>
+            <td class="py-2 text-right">
+              <button 
+                @click="activateItem(item.id, item.is_active)"
+                class="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 rounded-md text-white cursor-pointer"
+              >
+                {{ item.is_active == 0 ? "Activate" : "Deactivate"}}
+              </button>
+            </td>
             <td class="py-2 text-right">
               <button 
                 @click="deleteItem(item.id)"
@@ -84,6 +98,16 @@ async function deleteItem(id: number) {
   await $fetch('/api/items/delete', {
     method: 'POST',
     body: { id }
+  })
+
+  await loadItems()
+}
+
+async function activateItem(id: number, status: number) {
+  const is_active = status == 0 ? 1 : 0
+  await $fetch('/api/items/activate', {
+    method: 'POST',
+    body: { id, is_active }
   })
 
   await loadItems()
