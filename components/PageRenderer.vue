@@ -9,7 +9,7 @@ import { usePage } from '~/composables/usePage'
 import { useAuth } from '~/composables/useAuth'
 
 import CheckoutPage from '~/components/pages/Checkout.vue'
-import AboutPage from '~/components/pages/About.vue'
+import HistoryPage from '~/components/pages/History.vue'
 import ItemsPage from '~/components/pages/Items.vue'
 import CashiersPage from '~/components/pages/Cashiers.vue'
 import UsersPage from '~/components/pages/Users.vue'
@@ -25,7 +25,7 @@ interface Page {
 
 const pages: Record<string, Page> = {
   Checkout: { component: CheckoutPage, allowedRoles: ['user', 'admin'] },
-  About: { component: AboutPage, allowedRoles: ['user', 'admin'] },
+  History: { component: HistoryPage, allowedRoles: ['user', 'admin'] },
   Items: { component: ItemsPage, allowedRoles: ['admin'] },
   Cashiers: { component: CashiersPage, allowedRoles: ['admin'] },
   Users: { component: UsersPage, allowedRoles: ['admin'] },
