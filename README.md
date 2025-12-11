@@ -1,4 +1,4 @@
-# Create database with the following tables
+## Create database with the following tables
 
 CREATE TABLE IF NOT EXISTS users (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -53,3 +53,15 @@ CREATE TABLE order_items (
   FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
   FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
+
+## Necessary environment variables:
+DB_HOST
+DB_USER
+DB_PASSWORD
+DB_NAME
+DB_CONN_LIMIT
+
+SESSION_COOKIE_NAME
+SESSION_SECRET
+SESSION_INACTIVITY_MINUTES
+SESSION_MAX_AGE_MINUTES
