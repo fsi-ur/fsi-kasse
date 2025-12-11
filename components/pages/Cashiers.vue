@@ -22,6 +22,8 @@
           <tr class="border-b border-gray-600">
             <th class="text-left pb-2">Name</th>
             <th class="text-left pb-2">Active</th>
+            <th class="text-left pb-2"></th>
+            <th class="text-left pb-2"></th>
           </tr>
         </thead>
 
