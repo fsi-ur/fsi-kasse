@@ -56,6 +56,15 @@ CREATE TABLE order_items (
   FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
 
+CREATE TABLE fachschaft_payments (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  member_id BIGINT UNSIGNED NOT NULL,
+  cashier_id BIGINT UNSIGNED NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (member_id) REFERENCES cashiers(id),
+  FOREIGN KEY (cashier_id) REFERENCES cashiers(id)
+);
+
 ## Necessary environment variables:
 DB_HOST
 DB_USER
