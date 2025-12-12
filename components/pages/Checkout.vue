@@ -65,8 +65,19 @@
           </li>
         </ul>
 
-        <div class="mt-4 font-bold text-lg">
-          Total: {{ total.toFixed(2) }} €
+        <div class="flex flex-rows justify-between">
+          <div class="mt-4 font-bold text-lg">
+            Total: {{ total.toFixed(2) }} €
+          </div>
+          <button
+            @click="isFachschaft = !isFachschaft"
+            class="mt-4 px-4 rounded-md shadow-md text-sm cursor-pointer"
+            :class="isFachschaft
+              ? 'bg-green-600 text-white'
+              : 'bg-gray-300 text-gray-800'"
+          >
+            {{ isFachschaft ? 'Fachschaft Order ✓' : 'Mark as Fachschaft Order' }}
+          </button>
         </div>
 
         <button
@@ -114,7 +125,7 @@ const cashiers = ref<any[]>([])
 
 const showConfirm = ref(false)
 
-const { selectedCashier, orderItems } = useCheckout()
+const { selectedCashier, orderItems, isFachschaft } = useCheckout()
 
 onMounted(async () => {
   const res1 = await $fetch('/api/items', { method: 'GET' })
@@ -140,12 +151,13 @@ function addToOrder(item: any) {
   })
 }
 
-const total = computed(() =>
-  orderItems.value.reduce(
+const total = computed(() => {
+  if (isFachschaft.value) return 0
+  return orderItems.value.reduce(
     (sum, it) => sum + (it.price * it.quantity) + (it.deposit * it.quantity),
     0
   )
-)
+})
 
 function removeLine(id: number) {
   orderItems.value = orderItems.value.filter(line => line.id !== id)
@@ -158,12 +170,14 @@ async function finishOrder() {
     method: 'POST',
     body: {
       cashier_id: selectedCashier.value,
-      items: orderItems.value
+      items: orderItems.value,
+      is_fachschaft: isFachschaft.value
     }
   })
 
   if (res.ok) {
     orderItems.value = []
+    isFachschaft.value = false
   }
 }
 </script>

@@ -18,14 +18,22 @@
             <div class="font-semibold">
               Order #{{ order.id }} - Total:
             {{
-              order.items
-                .reduce((s : any, i : any) => s + (i.price * i.quantity) + (i.deposit * i.quantity), 0)
-                .toFixed(2)
+              order.is_fachschaft
+                ? '0.00'
+                : order.items
+                  .reduce((s : any, i : any) => s + (i.price * i.quantity) + (i.deposit * i.quantity), 0)
+                  .toFixed(2)
             }}
             €
             </div>
             <div class="text-sm text-gray-500">
               Cashier: {{ order.cashier }} — {{ formatDate(order.created_at) }}
+            </div>
+            <div
+              v-if="order.is_fachschaft"
+              class="text-xs mt-1 inline-block px-2 py-1 bg-green-100 text-green-700 rounded"
+            >
+              Fachschaft Order (Free)
             </div>
           </div>
 

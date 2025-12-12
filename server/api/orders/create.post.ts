@@ -7,15 +7,15 @@ export default defineEventHandler(async (event) => {
   const user = await getCurrentUserFromEvent(event, { touch: true })
   if (!user) return { ok: false, error: 'Not authenticated' }
 
-  const { cashier_id, items } = await readBody(event)
+  const { cashier_id, is_fachschaft = false, items } = await readBody(event)
 
   if (!cashier_id || !items || items.length === 0) {
     return { ok: false, error: 'Missing order details' }
   }
 
   const result = await query(
-    `INSERT INTO orders (cashier_id) VALUES (?)`,
-    [cashier_id]
+    `INSERT INTO orders (cashier_id, fachschaft) VALUES (?, ?)`,
+    [cashier_id, is_fachschaft ? 1 : 0]
   )
 
   const order_id = normalizeBigInt(result.insertId)

@@ -10,6 +10,7 @@ export default defineEventHandler(async (event) => {
   const rows = await query(`
     SELECT 
       o.id AS order_id,
+      o.fachschaft,
       o.created_at,
       c.id AS cashier_id,
       c.name AS cashier_name,
@@ -34,6 +35,7 @@ export default defineEventHandler(async (event) => {
       order = {
         id: row.order_id,
         cashier: row.cashier_name,
+        is_fachschaft: row.fachschaft,
         created_at: row.created_at,
         items: []
       }
