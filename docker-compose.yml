@@ -1,0 +1,52 @@
+services:
+  app:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+    env_file:
+      - .env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3000
+      - DB_HOST=${DB_HOST:-db}
+      - DB_USER=${DB_USER:-fsi}
+      - DB_PASSWORD=${DB_PASSWORD:-fsi_password}
+      - DB_NAME=${DB_NAME:-fsi_kasse}
+      - DB_CONN_LIMIT=${DB_CONN_LIMIT:-5}
+      - SESSION_COOKIE_NAME=${SESSION_COOKIE_NAME:-fsi_session}
+      - SESSION_SECRET=${SESSION_SECRET:-dev_change_me}
+      - SESSION_INACTIVITY_MINUTES=${SESSION_INACTIVITY_MINUTES:-30}
+      - SESSION_MAX_AGE_MINUTES=${SESSION_MAX_AGE_MINUTES:-1440}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+    ports:
+      - "3000:3000"
+    command: sh -c "npm ci && node scripts/seed-admin.mjs && npm run build && node .output/server/index.mjs"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: mariadb:11.4
+    environment:
+      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-root_password}
+      - MARIADB_DATABASE=${DB_NAME:-fsi_kasse}
+      - MARIADB_USER=${DB_USER:-fsi}
+      - MARIADB_PASSWORD=${DB_PASSWORD:-fsi_password}
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mariadb", "-u", "${DB_USER:-fsi}", "-p${DB_PASSWORD:-fsi_password}", "-h", "localhost", "-e", "SELECT 1;"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  db_data:
