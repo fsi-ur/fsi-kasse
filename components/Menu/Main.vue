@@ -15,7 +15,7 @@
               : 'bg-gray-800 text-gray-400'
           ]"
         >
-          <img :src="item.icon" alt="" class="w-7 h-7" />
+          <Icon :name="item.icon" class="w-10 h-10" aria-hidden="true" />
         </div>
 
         <span class="mt-2 text-sm text-gray-300 font-medium">

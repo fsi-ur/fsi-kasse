@@ -45,10 +45,10 @@
               class="col-span-1 flex justify-end cursor-pointer"
               @click="removeLine(line.id)"
             >
-              <img
-                src="/icon-cancel.svg"
-                alt="Remove"
+              <Icon
+                name="ph:x"
                 class="w-4 h-4 hover:opacity-70 transition"
+                aria-hidden="true"
               />
             </button>
           </li>

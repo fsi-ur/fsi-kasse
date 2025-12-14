@@ -14,12 +14,12 @@ import { useAuth } from '~/composables/useAuth'
 const { user, fetchSession } = useAuth()
 
 const menuItems = [
-  { name: 'Checkout', label: 'Checkout', icon: '/icon-checkout.svg', roles: ['user', 'admin'] },
-  { name: 'History', label: 'History', icon: '/icon-history.svg', roles: ['user', 'admin'] },
-  { name: 'Fachschaft', label: 'Fachschaft', icon: 'icon-fachschaft.svg', roles: ['user', 'admin'] },
-  { name: 'Items', label: 'Items', icon: '/icon-items.svg', roles: ['admin'] },
-  { name: 'Cashiers', label: 'Cashiers', icon: '/icon-cashiers.svg', roles: ['admin'] },
-  { name: 'Users', label: 'Users', icon: '/icon-users.svg', roles: ['admin'] },
+  { name: 'Checkout', label: 'Checkout', icon: 'ph:shopping-cart-simple', roles: ['user', 'admin'] },
+  { name: 'History', label: 'History', icon: 'ph:clock-counter-clockwise', roles: ['user', 'admin'] },
+  { name: 'Fachschaft', label: 'Fachschaft', icon: 'fa7-solid:money-bill-1', roles: ['user', 'admin'] },
+  { name: 'Items', label: 'Items', icon: 'ph:package', roles: ['admin'] },
+  { name: 'Cashiers', label: 'Cashiers', icon: 'ph:storefront', roles: ['admin'] },
+  { name: 'Users', label: 'Users', icon: 'ph:users-three', roles: ['admin'] },
 ]
 
 const filteredMenuItems = computed(() => {

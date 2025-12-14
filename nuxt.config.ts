@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineNuxtConfig({
   compatibilityDate: '2025-12-05',
   devtools: { enabled: false },
-  modules: ['@vite-pwa/nuxt'],
+  modules: ['@vite-pwa/nuxt', '@nuxt/icon'],
   css: ['~/assets/css/main.css'],
   app: {
     // Allow hosting under a subpath like /kasse
