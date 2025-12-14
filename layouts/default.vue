@@ -1,9 +1,9 @@
 <template>
   <div class="flex min-h-screen">
-    <MenuMain :items="filteredMenuItems" />
+    <MenuMain :items="filteredMenuItems" :open="menuOpen" @close="menuOpen = false" />
 
-    <main class="flex-1 ml-36 p-6 bg-gray-100">
-      <PageRenderer />
+    <main class="flex-1 md:ml-36 p-6 bg-gray-100" @click="handleClick">
+      <PageRenderer @open-menu="handleOpen" />
     </main>
   </div>
 </template>
@@ -12,6 +12,9 @@
 import { useAuth } from '~/composables/useAuth'
 
 const { user, fetchSession } = useAuth()
+
+const menuOpen = ref(false)
+const openMenu = ref(false)
 
 const menuItems = [
   { name: 'Checkout', label: 'Checkout', icon: 'ph:shopping-cart-simple', roles: ['user', 'admin'] },
@@ -29,6 +32,19 @@ const filteredMenuItems = computed(() => {
     return it.roles.includes(user.value.role)
   })
 })
+
+function handleOpen() {
+  openMenu.value = true
+  menuOpen.value = true
+}
+
+function handleClick() {
+  if (openMenu.value) {
+    openMenu.value = false
+  } else {
+    menuOpen.value = false
+  }
+}
 
 onMounted(() => {
   fetchSession()

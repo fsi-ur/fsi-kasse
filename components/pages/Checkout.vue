@@ -1,13 +1,13 @@
 <template>
-  <Page headline1="Checkout">
+  <Page headline1="Checkout" @open-menu="$emit('openMenu')">
     <template #header>
       <MenuSelectCashier />
     </template>
 
     <template #cards>
-      <div class="col-span-8 bg-white p-4 rounded-xl shadow-lg">
+      <div class="col-span-12 lg:col-span-6 xl:col-span-8 bg-white p-4 rounded-xl shadow-lg">
         <h2 class="text-xl font-semibold mb-4">Items</h2>
-        <div class="grid grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
           <div
             v-for="item in items"
             :key="item.id"
@@ -20,7 +20,7 @@
         </div>
       </div>
 
-      <div class="col-span-4 bg-white p-4 rounded-xl shadow-lg">
+      <div class="col-span-12 lg:col-span-6 xl:col-span-4 bg-white p-4 rounded-xl shadow-lg">
         <h2 class="text-xl font-semibold mb-4">Current Order</h2>
         <div v-if="orderItems.length === 0" class="text-gray-400">
           No items added yet.
@@ -54,7 +54,7 @@
           </li>
         </ul>
 
-        <div class="flex flex-rows justify-between">
+        <div class="flex flex-rows flex-wrap justify-between">
           <div class="mt-4 font-bold text-lg">
             Total: {{ total.toFixed(2) }} €
           </div>
@@ -95,6 +95,10 @@
 <script setup lang="ts">
 const items = ref<any[]>([])
 const showConfirm = ref(false)
+
+const emit = defineEmits<{
+  (e: 'openMenu'): void
+}>()
 
 const { selectedCashier, orderItems, isFachschaft } = useCheckout()
 

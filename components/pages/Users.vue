@@ -1,5 +1,5 @@
 <template>
-  <Page headline1="User Management">
+  <Page headline1="User Management" @open-menu="$emit('openMenu')">
     <template #cards>
       <div class="col-span-12 p-4 bg-white shadow-lg rounded-xl">
         <h2 class="text-xl font-semibold mb-2">Create New User</h2>
@@ -65,6 +65,10 @@
 </template>
 
 <script setup lang="ts">
+const emit = defineEmits<{
+  (e: 'openMenu'): void
+}>()
+
 const users = ref<any[]>([])
 const newUsername = ref('')
 const newPassword = ref('')

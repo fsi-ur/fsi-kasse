@@ -1,5 +1,5 @@
 <template>
-  <Page headline1="Order History">
+  <Page headline1="Order History" @open-menu="$emit('openMenu')">
     <template #cards>
       <div v-if="loading" class="col-span-12 text-gray-500">Loading…</div>
 
@@ -84,6 +84,10 @@
 </template>
 
 <script setup lang="ts">
+const emit = defineEmits<{
+  (e: 'openMenu'): void
+}>()
+
 const orders = ref<any[]>([])
 const loading = ref(true)
 const opened = ref<Record<number, boolean>>({})

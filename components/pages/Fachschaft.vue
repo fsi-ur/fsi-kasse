@@ -1,11 +1,11 @@
 <template>
-  <Page headline1="Fachschaft Payments">
+  <Page headline1="Fachschaft Payments" @open-menu="$emit('openMenu')">
     <template #header>
       <MenuSelectCashier />
     </template>
 
     <template #cards>
-      <div class="col-span-12 p-4 bg-white shadow-lg rounded-xl flex gap-4 items-end">
+      <div class="col-span-12 p-4 bg-white shadow-lg rounded-xl flex flex-wrap gap-4 items-end">
         <div>
           <label class="block mb-1 text-md">Member Name</label>
           <select
@@ -66,6 +66,10 @@ const payments = ref<any[]>([])
 const selectedMember = ref<number | string>('')
 
 const showConfirm = ref(false)
+
+const emit = defineEmits<{
+  (e: 'openMenu'): void
+}>()
 
 const { selectedCashier } = useCheckout()
 

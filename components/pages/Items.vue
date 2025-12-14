@@ -1,5 +1,5 @@
 <template>
-  <Page headline1="Item Management">
+  <Page headline1="Item Management" @open-menu="$emit('openMenu')">
     <template #cards>
       <div class="col-span-12 p-4 bg-white shadow-lg rounded-xl flex gap-4 items-end">
         <div>
@@ -77,6 +77,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+
+const emit = defineEmits<{
+  (e: 'openMenu'): void
+}>()
 
 const items = ref<any[]>([])
 const newItem = ref({

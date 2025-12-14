@@ -1,6 +1,6 @@
 <template>
   <div class="w-full">
-    <component v-if="loaded" :is="currentComponent" />
+    <component v-if="loaded" :is="currentComponent" @open-menu="$emit('openMenu')"/>
   </div>
 </template>
 
@@ -15,6 +15,10 @@ import ItemsPage from '~/components/pages/Items.vue'
 import CashiersPage from '~/components/pages/Cashiers.vue'
 import UsersPage from '~/components/pages/Users.vue'
 import LoginPage from '~/components/pages/Login.vue'
+
+const emit = defineEmits<{
+  (e: 'openMenu'): void
+}>()
 
 const { currentPage } = usePage()
 const { user, fetchSession } = useAuth()
