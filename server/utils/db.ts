@@ -1,4 +1,4 @@
-import mariadb from 'mariadb'
+import * as mariadb from 'mariadb'
 
 const pool = mariadb.createPool({
   host: process.env.DB_HOST,
@@ -8,12 +8,34 @@ const pool = mariadb.createPool({
   connectionLimit: Number(process.env.DB_CONN_LIMIT || 5)
 })
 
-export async function query(sql: string, params?: any[]) {
-  let conn
+export async function query<T = any>(sql: string, params?: unknown[], conn?: mariadb.PoolConnection): Promise<T> {
+  let connection = conn
+  let shouldRelease = false
+
   try {
-    conn = await pool.getConnection()
-    return await conn.query(sql, params)
+    if (!connection) {
+      connection = await pool.getConnection()
+      shouldRelease = true
+    }
+
+    return await connection.query(sql, params)
   } finally {
-    if (conn) conn.release()
+    if (shouldRelease && connection) connection.release()
+  }
+}
+
+export async function withTransaction<T>(callback: (conn: mariadb.PoolConnection) => Promise<T>): Promise<T> {
+  const conn = await pool.getConnection()
+
+  try {
+    await conn.beginTransaction()
+    const result = await callback(conn)
+    await conn.commit()
+    return result
+  } catch (err) {
+    await conn.rollback()
+    throw err
+  } finally {
+    conn.release()
   }
 }

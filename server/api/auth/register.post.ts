@@ -1,5 +1,5 @@
 import { defineEventHandler, readBody } from 'h3'
-import { query } from '~/server/utils/db'
+import { query, withTransaction } from '~/server/utils/db'
 import { hashPassword } from '~/server/utils/auth'
 import { getCurrentUserFromEvent } from '~/server/utils/sessionGuard'
 
@@ -15,13 +15,35 @@ export default defineEventHandler(async (event) => {
 
   const passwordHash = await hashPassword(password)
   try {
-    await query(
-      `INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, ?)`,
-      [username, passwordHash, role, is_active]
-    )
+    await withTransaction(async (conn) => {
+      const insertResult: any = await query(
+        `INSERT INTO users (username, password_hash, is_active) VALUES (?, ?, ?)`,
+        [username, passwordHash, is_active],
+        conn
+      )
+
+      const roleRows = await query<{ id: number }[]>(
+        `SELECT id FROM roles WHERE code = ? AND is_active = 1 LIMIT 1`,
+        [role],
+        conn
+      )
+
+      if (!roleRows.length) {
+        throw new Error('ROLE_NOT_FOUND')
+      }
+
+      await query(
+        `INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)`,
+        [Number(insertResult.insertId), Number(roleRows[0]?.id)],
+        conn
+      )
+    })
   } catch (err: any) {
     if (err.code === 'ER_DUP_ENTRY') {
       return { ok: false, error: 'Username already exists' }
+    }
+    if (err.message === 'ROLE_NOT_FOUND') {
+      return { ok: false, error: 'Selected role does not exist' }
     }
     throw err
   }

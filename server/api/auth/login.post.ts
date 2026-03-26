@@ -2,6 +2,7 @@ import { defineEventHandler, readBody, setCookie } from 'h3'
 import { query } from '~/server/utils/db'
 import { makeToken, createSession, comparePassword } from '~/server/utils/auth'
 import { normalizeBigInt } from '~/server/utils/normalize'
+import { getPrimaryRoleCode, getUserRoleCodes } from '~/server/utils/roles'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -39,6 +40,10 @@ export default defineEventHandler(async (event) => {
 
   return {
     ok: true,
-    user: { id: user.id, username: user.username, role: user.role }
+    user: {
+      id: user.id,
+      username: user.username,
+      role: getPrimaryRoleCode(await getUserRoleCodes(Number(user.id))),
+    }
   }
 })
