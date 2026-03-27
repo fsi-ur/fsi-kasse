@@ -1,6 +1,6 @@
 import crypto from 'crypto'
-import { query } from './db'
 import bcrypt from 'bcrypt'
+import { accountingQuery } from './db'
 
 const {
   SESSION_SECRET,
@@ -33,16 +33,16 @@ export async function comparePassword(password: string, hash: string) {
 export async function createSession(userId: number, token: string) {
   const tokenHash = hmacToken(token)
   const now = new Date()
-  const lastActiveAt = now.toISOString().slice(0, 19).replace('T', ' ')
-  const createdAt = lastActiveAt
+  const timestamp = now.toISOString().slice(0, 19).replace('T', ' ')
+  const expiresAt = new Date(Date.now() + maxAgeMinutes * 60 * 1000)
+    .toISOString()
+    .slice(0, 19)
+    .replace('T', ' ')
 
-  const expires = new Date(Date.now() + maxAgeMinutes * 60 * 1000)
-  const expiresAt = expires.toISOString().slice(0, 19).replace('T', ' ')
-
-  const res = await query(
+  await accountingQuery(
     `INSERT INTO sessions (user_id, token_hash, created_at, last_active_at, expires_at)
      VALUES (?, ?, ?, ?, ?)`,
-    [userId, tokenHash, createdAt, lastActiveAt, expiresAt]
+    [userId, tokenHash, timestamp, timestamp, expiresAt]
   )
 
   return true
@@ -50,34 +50,35 @@ export async function createSession(userId: number, token: string) {
 
 export async function getSessionByToken(token: string) {
   const tokenHash = hmacToken(token)
-  const rows = await query(
+  const rows = await accountingQuery(
     `SELECT s.*, u.username, u.is_active
      FROM sessions s
      JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ?`,
     [tokenHash]
   )
+
   const arr = rows as any[]
   return arr[0] || null
 }
 
 export async function touchSession(token: string) {
   const tokenHash = hmacToken(token)
-  const now = new Date()
-  const lastActiveAt = now.toISOString().slice(0, 19).replace('T', ' ')
+  const lastActiveAt = new Date().toISOString().slice(0, 19).replace('T', ' ')
 
-  const res = await query(
+  await accountingQuery(
     `UPDATE sessions SET last_active_at = ? WHERE token_hash = ?`,
     [lastActiveAt, tokenHash]
   )
+
   return true
 }
 
 export async function deleteSessionByToken(token: string) {
   const tokenHash = hmacToken(token)
-  await query(`DELETE FROM sessions WHERE token_hash = ?`, [tokenHash])
+  await accountingQuery(`DELETE FROM sessions WHERE token_hash = ?`, [tokenHash])
 }
 
 export async function cleanupExpiredSessions() {
-  await query(`DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at < NOW()`)
+  await accountingQuery(`DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at < NOW()`)
 }

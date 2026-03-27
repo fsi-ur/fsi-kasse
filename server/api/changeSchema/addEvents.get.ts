@@ -1,11 +1,10 @@
-import { defineEventHandler, readBody } from 'h3'
+import { defineEventHandler } from 'h3'
 import { query } from '~/server/utils/db'
-import { getCurrentUserFromEvent } from '~/server/utils/sessionGuard'
+import { requirePermission } from '~/server/utils/api/guards'
 
 export default defineEventHandler(async (event) => {
-  const user = await getCurrentUserFromEvent(event, { touch: true })
-  if (!user) return { ok: false, error: 'Not authenticated' }
-  if (user.role !== 'admin') return { ok: false, error: 'Not authorized' }
+  const current = await requirePermission(event, 'cash_register.manage')
+  if (!current.ok) return current
 
   const createTable = await query(`
     CREATE TABLE IF NOT EXISTS events (
@@ -24,7 +23,7 @@ export default defineEventHandler(async (event) => {
   const addEventIdOrdersForeignKey = await query(`
     ALTER TABLE orders
       ADD CONSTRAINT fk_orders_event
-      FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE;  
+      FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE;
   `)
 
   const addEventIdFachschaft = await query(`
@@ -42,23 +41,22 @@ export default defineEventHandler(async (event) => {
     INSERT INTO events (name, is_active) VALUES ('Weihnachtsfeier', 1);
   `)
 
-  const updateOrders = await query(`
-    UPDATE orders SET event_id = 1;
-  `)
+  const updateOrders = await query(`UPDATE orders SET event_id = 1;`)
+  const updateOrderTable = await query(`ALTER TABLE orders MODIFY event_id BIGINT UNSIGNED NOT NULL;`)
+  const updateFachschaft = await query(`UPDATE fachschaft_payments SET event_id = 1;`)
+  const updateFachschaftTable = await query(`ALTER TABLE fachschaft_payments MODIFY event_id BIGINT UNSIGNED NOT NULL;`)
 
-  const updateOrderTable = await query(`
-    ALTER TABLE orders
-      MODIFY event_id BIGINT UNSIGNED NOT NULL;  
-  `)
-
-  const updateFachschaft = await query(`
-    UPDATE fachschaft_payments SET event_id = 1;
-  `)
-
-  const updateFachschaftTable = await query(`
-    ALTER TABLE fachschaft_payments
-      MODIFY event_id BIGINT UNSIGNED NOT NULL;
-  `)
-
-  return { ok: true, createTable, addEventIdOrders, addEventIdOrdersForeignKey, addEventIdFachschaft, addEventIdFachschaftForeignKey, addWeihnachtsfeier, updateOrders, updateOrderTable, updateFachschaft, updateFachschaftTable }
+  return {
+    ok: true,
+    createTable,
+    addEventIdOrders,
+    addEventIdOrdersForeignKey,
+    addEventIdFachschaft,
+    addEventIdFachschaftForeignKey,
+    addWeihnachtsfeier,
+    updateOrders,
+    updateOrderTable,
+    updateFachschaft,
+    updateFachschaftTable,
+  }
 })

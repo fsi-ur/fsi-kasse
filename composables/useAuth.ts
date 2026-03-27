@@ -1,7 +1,10 @@
+import type { PermissionKey } from '~/config/permissions'
+
 interface User {
   id: number
   username: string
-  role: string
+  role: 'admin' | 'user'
+  permissions: PermissionKey[]
 }
 
 interface SessionResponse {
@@ -23,11 +26,11 @@ export const useAuth = () => {
       if (data?.ok) {
         user.value = data.user!
         return user.value
-      } else {
-        user.value = null
-        return null
       }
-    } catch (err: any) {
+
+      user.value = null
+      return null
+    } catch {
       user.value = null
       return null
     }
@@ -57,6 +60,6 @@ export const useAuth = () => {
     if (Array.isArray(roles)) return roles.includes(user.value.role)
     return user.value.role === roles
   }
-  
+
   return { user, fetchSession, login, logout, hasRole }
 }

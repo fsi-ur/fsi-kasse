@@ -1,11 +1,11 @@
 import { defineEventHandler, readBody } from 'h3'
 import { query } from '~/server/utils/db'
-import { getCurrentUserFromEvent } from '~/server/utils/sessionGuard'
+import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
 
 export default defineEventHandler(async (event) => {
-  const user = await getCurrentUserFromEvent(event, { touch: true })
-  if (!user) return { ok: false, error: 'Not authenticated' }
+  const current = await requirePermission(event, 'cash_register.use')
+  if (!current.ok) return current
 
   const { cashier_id, event_id, member_id } = await readBody(event)
 
@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
     [member_id, cashier_id, event_id]
   )
 
-  const payment_id = normalizeBigInt(result.insertId)
+  const payment_id = normalizeBigInt((result as any).insertId)
 
   return { ok: true, order_id: normalizeBigInt(payment_id) }
 })

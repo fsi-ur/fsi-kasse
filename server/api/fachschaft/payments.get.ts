@@ -1,11 +1,11 @@
-import { defineEventHandler } from 'h3'
+import { defineEventHandler, getQuery } from 'h3'
 import { query } from '~/server/utils/db'
-import { getCurrentUserFromEvent } from '~/server/utils/sessionGuard'
+import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
 
 export default defineEventHandler(async (event) => {
-  const user = await getCurrentUserFromEvent(event, { touch: true })
-  if (!user) return { ok: false, error: 'Not authenticated' }
+  const current = await requirePermission(event, 'cash_register.use')
+  if (!current.ok) return current
 
   const eventId = Number(getQuery(event).eventId)
   if (!eventId) {
@@ -26,10 +26,10 @@ export default defineEventHandler(async (event) => {
   `, [eventId])
 
   const data = normalizeBigInt(rows)
-
   const payments: any[] = []
-  for (const row of data) {
-    let payment = payments.find(p => p.id === row.payment_id)
+
+  for (const row of data as any[]) {
+    let payment = payments.find(entry => entry.id === row.payment_id)
     if (!payment) {
       payment = {
         id: row.payment_id,

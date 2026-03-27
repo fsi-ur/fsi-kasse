@@ -3,12 +3,19 @@
     <template #cards>
       <div class="col-span-12 p-4 bg-white shadow-lg rounded-xl">
         <h2 class="text-xl font-semibold mb-2">Create New User</h2>
+        <p
+          v-if="isConnectedMode"
+          class="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        >
+          User creation is managed by the connected accounting application in this mode.
+        </p>
         <div class="flex flex-col gap-2 max-w-sm">
           <input
             v-model="newUsername"
             placeholder="New Username"
             class="outline outline-gray-300 bg-gray-100 p-2 rounded-md"
             autocomplete="new-username"
+            :disabled="isConnectedMode"
           />
           <input
             v-model="newPassword"
@@ -16,14 +23,20 @@
             type="password"
             class="outline outline-gray-300 bg-gray-100 p-2 rounded-md"
             autocomplete="new-password"
+            :disabled="isConnectedMode"
           />
-          <select v-model="role" class="outline outline-gray-300 bg-gray-100 p-2 rounded-md">
+          <select
+            v-model="role"
+            class="outline outline-gray-300 bg-gray-100 p-2 rounded-md"
+            :disabled="isConnectedMode"
+          >
             <option value="user">User</option>
             <option value="admin">Admin</option>
           </select>
           <button
             @click="registerUser"
-            class="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-2 rounded-md cursor-pointer"
+            class="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-2 rounded-md cursor-pointer disabled:cursor-not-allowed disabled:bg-gray-400"
+            :disabled="isConnectedMode"
           >
             Create User
           </button>
@@ -69,6 +82,9 @@ const emit = defineEmits<{
   (e: 'openMenu'): void
 }>()
 
+const runtimeConfig = useRuntimeConfig()
+const isConnectedMode = runtimeConfig.public.accountingMode === 'connected'
+
 const users = ref<any[]>([])
 const newUsername = ref('')
 const newPassword = ref('')
@@ -85,6 +101,8 @@ async function loadUsers() {
 }
 
 async function registerUser() {
+  if (isConnectedMode) return
+
   error.value = ''
   message.value = ''
 

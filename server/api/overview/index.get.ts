@@ -1,11 +1,11 @@
-import { defineEventHandler } from 'h3'
+import { defineEventHandler, getQuery } from 'h3'
 import { query } from '~/server/utils/db'
-import { getCurrentUserFromEvent } from '~/server/utils/sessionGuard'
+import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
 
 export default defineEventHandler(async (event) => {
-  const user = await getCurrentUserFromEvent(event, { touch: true })
-  if (!user) return { ok: false, error: 'Not authenticated' }
+  const current = await requirePermission(event, 'cash_register.manage')
+  if (!current.ok) return current
 
   const eventId = Number(getQuery(event).eventId)
   if (!eventId) {
@@ -26,13 +26,9 @@ export default defineEventHandler(async (event) => {
     GROUP BY i.id
     ORDER BY i.name ASC
   `, [eventId]))
-    
-  const regularItems = normalizeBigInt(regularRows)
 
-  const totalRevenue = regularItems.reduce(
-    (s: number, i: any) => s + Number(i.revenue),
-    0
-  )
+  const regularItems = normalizeBigInt(regularRows)
+  const totalRevenue = regularItems.reduce((sum: number, item: any) => sum + Number(item.revenue), 0)
 
   const fachschaftRows = normalizeBigInt(await query(`
     SELECT
@@ -79,42 +75,33 @@ export default defineEventHandler(async (event) => {
     JOIN order_items oi ON o.id = oi.order_id
     JOIN items i ON oi.item_id = i.id
     WHERE o.fachschaft = 0
-      AND o.created_at BETWEEN
-        NOW() - INTERVAL 2 HOUR AND NOW() - INTERVAL 1 HOUR
+      AND o.created_at BETWEEN NOW() - INTERVAL 2 HOUR AND NOW() - INTERVAL 1 HOUR
       AND event_id = ?
   `, [eventId]))
 
   const lastHourRevenue = Number(lastHourRows[0]?.revenue ?? 0)
   const lastHourQuantity = Number(lastHourRows[0]?.quantity ?? 0)
-
   const prevHourRevenue = Number(prevHourRows[0]?.revenue ?? 0)
   const prevHourQuantity = Number(prevHourRows[0]?.quantity ?? 0)
 
   return {
     ok: true,
-
-    regularRows,
-
-
     regular: {
       items: regularItems,
-      totalRevenue
+      totalRevenue,
     },
-
     fachschaft: {
-      items: fachschaftItems
+      items: fachschaftItems,
     },
-
     payments: {
       count: paymentCount,
-      revenue: paymentRevenue
+      revenue: paymentRevenue,
     },
-
     lastHour: {
       revenue: lastHourRevenue,
       quantity: lastHourQuantity,
       diffRevenue: lastHourRevenue - prevHourRevenue,
-      diffQuantity: lastHourQuantity - prevHourQuantity
+      diffQuantity: lastHourQuantity - prevHourQuantity,
     }
   }
 })

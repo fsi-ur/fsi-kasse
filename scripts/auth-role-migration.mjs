@@ -1,3 +1,8 @@
+const DEFAULT_ROLE_PERMISSIONS = {
+  admin: ['cash_register.manage', 'cash_register.use'],
+  user: ['cash_register.use'],
+}
+
 const ROLE_TABLES = [
   `
   CREATE TABLE IF NOT EXISTS roles (
@@ -84,19 +89,33 @@ async function ensureBaseRoleTables(conn) {
 
 async function ensureRole(conn, role, createdBy) {
   const existing = await conn.query('SELECT id FROM roles WHERE code = ? LIMIT 1', [role.code])
-  if (existing.length) return Number(existing[0].id)
+  let roleId = existing.length ? Number(existing[0].id) : null
 
-  if (!createdBy) return null
+  if (!roleId) {
+    if (!createdBy) return null
 
-  const result = await conn.query(
-    `
-    INSERT INTO roles (code, name, is_active, is_default, description, created_by)
-    VALUES (?, ?, 1, ?, NULL, ?)
-    `,
-    [role.code, role.name, role.isDefault, createdBy],
-  )
+    const result = await conn.query(
+      `
+      INSERT INTO roles (code, name, is_active, is_default, description, created_by)
+      VALUES (?, ?, 1, ?, NULL, ?)
+      `,
+      [role.code, role.name, role.isDefault, createdBy],
+    )
 
-  return Number(result.insertId)
+    roleId = Number(result.insertId)
+  }
+
+  for (const permissionKey of DEFAULT_ROLE_PERMISSIONS[role.code] || []) {
+    await conn.query(
+      `
+      INSERT IGNORE INTO role_permissions (role_id, permission_key)
+      VALUES (?, ?)
+      `,
+      [roleId, permissionKey],
+    )
+  }
+
+  return roleId
 }
 
 async function migrateLegacyUserRoles(conn) {

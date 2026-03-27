@@ -5,6 +5,11 @@ export default defineNuxtConfig({
   devtools: { enabled: false },
   modules: ['@vite-pwa/nuxt', '@nuxt/icon'],
   css: ['~/assets/css/main.css'],
+  runtimeConfig: {
+    public: {
+      accountingMode: process.env.ACCOUNTING_MODE || 'standalone',
+    },
+  },
   app: {
     // Allow hosting under a subpath like /kasse
     baseURL: process.env.APP_BASE_URL || '/'

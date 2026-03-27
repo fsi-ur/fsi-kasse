@@ -1,11 +1,11 @@
-import { defineEventHandler } from 'h3'
+import { defineEventHandler, getQuery } from 'h3'
 import { query } from '~/server/utils/db'
-import { getCurrentUserFromEvent } from '~/server/utils/sessionGuard'
+import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
 
 export default defineEventHandler(async (event) => {
-  const user = await getCurrentUserFromEvent(event, { touch: true })
-  if (!user) return { ok: false, error: 'Not authenticated' }
+  const current = await requirePermission(event, 'cash_register.use')
+  if (!current.ok) return current
 
   const eventId = Number(getQuery(event).eventId)
   if (!eventId) {
@@ -33,10 +33,10 @@ export default defineEventHandler(async (event) => {
   `, [eventId])
 
   const data = normalizeBigInt(rows)
-
   const orders: any[] = []
-  for (const row of data) {
-    let order = orders.find(o => o.id === row.order_id)
+
+  for (const row of data as any[]) {
+    let order = orders.find(entry => entry.id === row.order_id)
     if (!order) {
       order = {
         id: row.order_id,
@@ -47,6 +47,7 @@ export default defineEventHandler(async (event) => {
       }
       orders.push(order)
     }
+
     order.items.push({
       id: row.item_id,
       name: row.item_name,

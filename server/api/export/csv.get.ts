@@ -1,10 +1,10 @@
 import { defineEventHandler, setHeader } from 'h3'
 import { query } from '~/server/utils/db'
-import { getCurrentUserFromEvent } from '~/server/utils/sessionGuard'
+import { requirePermission } from '~/server/utils/api/guards'
 
 export default defineEventHandler(async (event) => {
-  const user = await getCurrentUserFromEvent(event, { touch: true })
-  if (!user) return { ok: false }
+  const current = await requirePermission(event, 'cash_register.manage')
+  if (!current.ok) return current
 
   const rows = await query(`
     SELECT
@@ -23,25 +23,23 @@ export default defineEventHandler(async (event) => {
     ORDER BY o.created_at DESC
   `)
 
-  let csv = [
-    'Order ID,Date,Cashier,Fachschaft,Item,Quantity,Price,Deposit,Total'
-  ].join('\n')
+  let csv = 'Order ID,Date,Cashier,Fachschaft,Item,Quantity,Price,Deposit,Total'
 
-  for (const r of rows) {
+  for (const row of rows as any[]) {
     const total =
-      r.fachschaft === 1
+      row.fachschaft === 1
         ? 0
-        : (Number(r.price) + Number(r.deposit)) * Number(r.quantity)
+        : (Number(row.price) + Number(row.deposit)) * Number(row.quantity)
 
     csv += `\n${[
-      r.order_id,
-      r.created_at.toISOString(),
-      `"${r.cashier}"`,
-      r.fachschaft,
-      `"${r.item}"`,
-      r.quantity,
-      r.price,
-      r.deposit,
+      row.order_id,
+      new Date(row.created_at).toISOString(),
+      `"${row.cashier}"`,
+      row.fachschaft,
+      `"${row.item}"`,
+      row.quantity,
+      row.price,
+      row.deposit,
       total.toFixed(2)
     ].join(',')}`
   }
