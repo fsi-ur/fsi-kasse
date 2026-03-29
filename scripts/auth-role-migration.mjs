@@ -149,7 +149,7 @@ async function migrateLegacyUserRoles(conn) {
   await conn.query('ALTER TABLE users DROP COLUMN role')
 }
 
-export async function runAuthRoleMigration(conn) {
+export async function runAuthRoleMigration(conn, options = {}) {
   const usersTableExists = await tableExists(conn, 'users')
   if (!usersTableExists) {
     console.log('auth-role-migration: skipped (users table missing)')
@@ -158,9 +158,9 @@ export async function runAuthRoleMigration(conn) {
 
   await ensureBaseRoleTables(conn)
 
-  const firstUserId = await getFirstUserId(conn)
-  await ensureRole(conn, { code: 'admin', name: 'ADMIN', isDefault: 0 }, firstUserId)
-  await ensureRole(conn, { code: 'user', name: 'USER', isDefault: 1 }, firstUserId)
+  const createdByUserId = options.createdByUserId ?? await getFirstUserId(conn)
+  await ensureRole(conn, { code: 'admin', name: 'ADMIN', isDefault: 0 }, createdByUserId)
+  await ensureRole(conn, { code: 'user', name: 'USER', isDefault: 1 }, createdByUserId)
   await migrateLegacyUserRoles(conn)
 
   console.log('auth-role-migration: complete')

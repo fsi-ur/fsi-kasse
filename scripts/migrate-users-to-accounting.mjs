@@ -1,4 +1,4 @@
-import mariadb from 'mariadb'
+import * as mariadb from 'mariadb'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 
@@ -7,11 +7,17 @@ const CASH_REGISTER_MANAGE = 'cash_register.manage'
 
 const {
   DB_HOST = 'db',
+  DB_PORT = '3306',
   DB_USER = 'fsi',
   DB_PASSWORD = 'fsi_password',
   DB_NAME = 'fsi_kasse',
-  ACCOUNTING_DB_NAME = 'fsi_buchhaltung',
   DB_CONN_LIMIT = '5',
+  ACCOUNTING_DB_HOST = DB_HOST,
+  ACCOUNTING_DB_PORT = DB_PORT,
+  ACCOUNTING_DB_USER = DB_USER,
+  ACCOUNTING_DB_PASSWORD = DB_PASSWORD,
+  ACCOUNTING_DB_NAME = 'fsi_buchhaltung',
+  ACCOUNTING_DB_CONN_LIMIT = DB_CONN_LIMIT,
 } = process.env
 
 if (!DB_NAME || !ACCOUNTING_DB_NAME) {
@@ -19,27 +25,34 @@ if (!DB_NAME || !ACCOUNTING_DB_NAME) {
   process.exit(1)
 }
 
-if (DB_NAME === ACCOUNTING_DB_NAME) {
-  console.error('migration: source and accounting database must be different')
+if (
+  DB_HOST === ACCOUNTING_DB_HOST &&
+  DB_PORT === ACCOUNTING_DB_PORT &&
+  DB_USER === ACCOUNTING_DB_USER &&
+  DB_NAME === ACCOUNTING_DB_NAME
+) {
+  console.error('migration: source and accounting database targets must be different')
   process.exit(1)
 }
 
-const poolOptions = {
+const localPool = mariadb.createPool({
   host: DB_HOST,
+  port: Number(DB_PORT),
   user: DB_USER,
   password: DB_PASSWORD,
+  database: DB_NAME,
   connectionLimit: Number(DB_CONN_LIMIT),
   dateStrings: true,
-}
-
-const localPool = mariadb.createPool({
-  ...poolOptions,
-  database: DB_NAME,
 })
 
 const accountingPool = mariadb.createPool({
-  ...poolOptions,
+  host: ACCOUNTING_DB_HOST,
+  port: Number(ACCOUNTING_DB_PORT),
+  user: ACCOUNTING_DB_USER,
+  password: ACCOUNTING_DB_PASSWORD,
   database: ACCOUNTING_DB_NAME,
+  connectionLimit: Number(ACCOUNTING_DB_CONN_LIMIT),
+  dateStrings: true,
 })
 
 const rl = createInterface({ input, output })
@@ -325,8 +338,8 @@ async function main() {
       return
     }
 
-    console.log(`Source database: ${DB_NAME}`)
-    console.log(`Accounting database: ${ACCOUNTING_DB_NAME}`)
+    console.log(`Source database: ${DB_NAME} @ ${DB_HOST}:${DB_PORT} as ${DB_USER}`)
+    console.log(`Accounting database: ${ACCOUNTING_DB_NAME} @ ${ACCOUNTING_DB_HOST}:${ACCOUNTING_DB_PORT} as ${ACCOUNTING_DB_USER}`)
     console.log(`Found ${localUsers.length} local users and ${accountingUsers.length} accounting users.`)
     console.log('Existing accounting users keep their current roles. This script only adds direct cash register permissions when needed.')
 

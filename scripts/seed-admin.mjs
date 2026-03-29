@@ -1,4 +1,4 @@
-import mariadb from 'mariadb'
+import * as mariadb from 'mariadb'
 import bcrypt from 'bcrypt'
 import { runAuthRoleMigration } from './auth-role-migration.mjs'
 
@@ -30,7 +30,6 @@ async function main() {
 
   try {
     conn = await pool.getConnection()
-    await runAuthRoleMigration(conn)
 
     const existing = await conn.query('SELECT id FROM users WHERE username = ? LIMIT 1', [ADMIN_USERNAME])
     let userId
@@ -48,13 +47,19 @@ async function main() {
       console.log(`seed-admin: created admin user "${ADMIN_USERNAME}"`)
     }
 
+    await runAuthRoleMigration(conn, { createdByUserId: userId })
+
     const adminRole = await conn.query('SELECT id FROM roles WHERE code = ? LIMIT 1', ['admin'])
-    if (adminRole.length) {
-      await conn.query(
-        'INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)',
-        [userId, Number(adminRole[0].id)]
-      )
+    if (!adminRole.length) {
+      throw new Error('ADMIN_ROLE_NOT_FOUND')
     }
+
+    await conn.query(
+      'INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)',
+      [userId, Number(adminRole[0].id)]
+    )
+
+    console.log(`seed-admin: ensured admin role for "${ADMIN_USERNAME}"`)
   } finally {
     if (conn) conn.release()
     await pool.end()

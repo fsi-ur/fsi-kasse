@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
 
   const roles = await getUserRoleIds(Number(user.id))
   const permissions = await getUserPermissions(Number(user.id), roles)
-  console.log(permissions)
+
   if (!permissions.includes('cash_register.use')) {
     return { ok: false, error: 'Not authorized' }
   }

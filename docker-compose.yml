@@ -1,6 +1,6 @@
 services:
   app:
-    image: node:20-alpine
+    image: node:22-alpine
     working_dir: /app
     volumes:
       - .:/app
@@ -41,7 +41,7 @@ services:
       - db_data:/var/lib/mysql
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
-      - "3306:3306"
+      - "3307:3306"
     healthcheck:
       test: ["CMD", "mariadb", "-u", "${DB_USER:-fsi}", "-p${DB_PASSWORD:-fsi_password}", "-h", "localhost", "-e", "SELECT 1;"]
       interval: 10s
