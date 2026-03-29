@@ -2,6 +2,7 @@ import { defineEventHandler, readBody } from 'h3'
 import { query } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
+import { getCashRegisterCashierById } from '~/server/utils/cashiers'
 import { getCashRegisterEventById } from '~/server/utils/events'
 
 export default defineEventHandler(async (event) => {
@@ -12,6 +13,14 @@ export default defineEventHandler(async (event) => {
 
   if (!cashier_id || !event_id || !items || items.length === 0) {
     return { ok: false, error: 'Missing order details' }
+  }
+
+  const selectedCashier = await getCashRegisterCashierById(Number(cashier_id))
+  if (!selectedCashier) {
+    return { ok: false, error: 'Selected cashier does not exist' }
+  }
+  if (!selectedCashier.is_active) {
+    return { ok: false, error: 'Selected cashier is not active' }
   }
 
   const selectedEvent = await getCashRegisterEventById(Number(event_id))

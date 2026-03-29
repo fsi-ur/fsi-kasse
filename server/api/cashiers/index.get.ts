@@ -1,17 +1,12 @@
 import { defineEventHandler } from 'h3'
-import { query } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
-import { normalizeBigInt } from '~/server/utils/normalize'
+import { getCashRegisterCashiers } from '~/server/utils/cashiers'
+import { isConnectedAccountingMode } from '~/server/utils/db'
 
 export default defineEventHandler(async (event) => {
   const current = await requirePermission(event, 'cash_register.use')
   if (!current.ok) return current
 
-  const rows = await query(`
-    SELECT id, name, image, is_active
-    FROM cashiers 
-    ORDER BY name ASC
-  `)
-
-  return { ok: true, cashiers: normalizeBigInt(rows) }
+  const rows = await getCashRegisterCashiers()
+  return { ok: true, cashiers: rows, read_only: isConnectedAccountingMode() }
 })

@@ -1,10 +1,14 @@
 import { defineEventHandler, readBody } from 'h3'
-import { query } from '~/server/utils/db'
+import { isConnectedAccountingMode, query } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
 
 export default defineEventHandler(async (event) => {
   const current = await requirePermission(event, 'cash_register.manage')
   if (!current.ok) return current
+
+  if (isConnectedAccountingMode()) {
+    return { ok: false, error: 'Cashier management is disabled in connected mode' }
+  }
 
   const { id, is_active } = await readBody(event)
   if (id == undefined || is_active == undefined) return { ok: false, error: 'Missing fields' }
