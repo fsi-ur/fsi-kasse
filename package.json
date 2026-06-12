@@ -7,6 +7,13 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
+    "setup:migrate:events": "node --env-file=.env scripts/migrate-events.mjs",
+    "setup:migrate:app-settings": "node --env-file=.env scripts/migrate-app-settings.mjs",
+    "setup:migrate:users-to-accounting": "node --env-file=.env scripts/migrate-users-to-accounting.mjs",
+    "setup:migrate:cashiers-to-accounting": "node --env-file=.env scripts/migrate-cashiers-to-accounting-members.mjs",
+    "setup:migrate:events-to-accounting": "node --env-file=.env scripts/migrate-events-to-accounting.mjs",
+    "setup:seed-admin": "node --env-file=.env scripts/seed-admin.mjs",
+    "setup:connection-db-user": "node --env-file=.env scripts/create-connection-db-user.mjs",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {

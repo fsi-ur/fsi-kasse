@@ -1,77 +1,97 @@
-## Create database with the following tables
+# Kassensystem
 
-CREATE TABLE IF NOT EXISTS users (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  username VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
-  is_active TINYINT(1) NOT NULL DEFAULT 1,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
+Nuxt-based cash register (PWA) for the Fachschaft. It shares its design system
+(Tailwind component classes, SearchSelect/Dropdown components, German/English
+translations) with the FSi Buchhaltung application.
 
-CREATE TABLE IF NOT EXISTS sessions (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id BIGINT UNSIGNED NOT NULL,
-  token_hash CHAR(64) NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  last_active_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  expires_at TIMESTAMP NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  UNIQUE KEY (token_hash)
-);
+## Database
 
-CREATE TABLE items (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  price DECIMAL(10,2) NOT NULL,
-  deposit DECIMAL(10,2),
-  image VARCHAR(255),
-  is_active TINYINT(1) NOT NULL DEFAULT 1,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+The schema is created from [db/init.sql](db/init.sql) (used by docker-compose on
+first start). For existing installations, the schema migrations are exposed as
+npm scripts (they read the environment from `.env`):
 
-CREATE TABLE cashiers (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  image VARCHAR(255),
-  is_active TINYINT(1) NOT NULL DEFAULT 1,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+```bash
+npm run setup:migrate:events         # events table + event_id on orders/fachschaft_payments
+npm run setup:migrate:app-settings   # app_settings table
+npm run setup:seed-admin             # admin bootstrap + auth role migration
+```
 
-CREATE TABLE orders (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  cashier_id BIGINT UNSIGNED NOT NULL,
-  fachschaft TINYINT(1) NOT NULL DEFAULT 0,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (cashier_id) REFERENCES cashiers(id) ON DELETE CASCADE
-);
+All of these are idempotent and run automatically inside docker compose before
+the app is built and started.
 
-CREATE TABLE order_items (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  order_id BIGINT UNSIGNED NOT NULL,
-  item_id BIGINT UNSIGNED NOT NULL,
-  quantity INT NOT NULL,
-  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-  FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
-);
+One-time, interactive migrations for switching an existing standalone
+installation to connected mode (these prompt for confirmation and are therefore
+**not** part of the docker compose startup):
 
-CREATE TABLE fachschaft_payments (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  member_id BIGINT UNSIGNED NOT NULL,
-  cashier_id BIGINT UNSIGNED NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (member_id) REFERENCES cashiers(id),
-  FOREIGN KEY (cashier_id) REFERENCES cashiers(id)
-);
+```bash
+npm run setup:migrate:users-to-accounting
+npm run setup:migrate:cashiers-to-accounting
+npm run setup:migrate:events-to-accounting
+```
 
-## Necessary environment variables:
-DB_HOST
-DB_USER
-DB_PASSWORD
-DB_NAME
-DB_CONN_LIMIT
+## Modes
 
-SESSION_COOKIE_NAME
-SESSION_SECRET
-SESSION_INACTIVITY_MINUTES
-SESSION_MAX_AGE_MINUTES
+The app runs in one of two modes, controlled by `ACCOUNTING_MODE`:
+
+- `standalone` — users, cashiers and events are managed locally in the
+  `fsi_kasse` database.
+- `connected` — users/sessions/permissions, members (cashiers) and events come
+  from the FSi Buchhaltung database (`ACCOUNTING_DB_*` variables). Cashiers and
+  events are read-only proxies of accounting members/events.
+
+### Connection database users
+
+Each application creates the restricted user for the *other* application in
+its own database:
+
+```bash
+npm run setup:connection-db-user
+```
+
+reads `CONNECTION_DB_USER` / `CONNECTION_DB_PASSWORD` from `.env` and creates a
+read-only user in this cash register database (`SELECT` on `events`, `items`,
+`orders`, `order_items`, `fachschaft_payments`, `app_settings`). The
+buchhaltung uses these credentials as `CASH_REGISTER_DB_USER` /
+`CASH_REGISTER_DB_PASSWORD` for its per-event cash register tab.
+
+In the other direction, run the same npm script in the buchhaltung and point
+`ACCOUNTING_DB_USER` / `ACCOUNTING_DB_PASSWORD` here at the user it creates.
+
+The script is idempotent (it re-syncs password and grants) and runs
+automatically inside docker compose; it skips itself when the env variables
+are not set.
+
+### Permissions
+
+Access is controlled through the permission keys `cash_register.use`
+(use checkout, history, Fachschaft payments) and `cash_register.manage`
+(items, cashiers, events, users, overview, settings). `manage` implies `use`.
+
+### Cash register settings
+
+App-wide settings (e.g. the Fachschaft payment amount) are stored in the local
+`app_settings` table and exposed via:
+
+- `GET /api/settings` — requires `cash_register.use`
+- `POST /api/settings/save` — requires `cash_register.manage`
+
+In connected mode, sessions are stored in the shared accounting database, so a
+user logged into the Buchhaltung with `cash_register.manage` can call these
+endpoints directly (cookie auth). To support that:
+
+- `ACCOUNTING_SESSION_COOKIE_NAME` — the Buchhaltung session cookie is accepted
+  as a fallback to the local one.
+- `ACCOUNTING_APP_ORIGINS` — comma separated origins allowed to call the API
+  cross-origin (only needed when the apps do not share a domain).
+
+## Environment variables
+
+See [.env.example](.env.example) for the full list:
+
+- `DB_*` — local cash register database
+- `ACCOUNTING_MODE`, `ACCOUNTING_DB_*` — connected mode database
+- `ACCOUNTING_SESSION_COOKIE_NAME`, `ACCOUNTING_APP_ORIGINS` — connected mode
+  access from the Buchhaltung
+- `SESSION_*` — session cookie and lifetime
+- `ADMIN_USERNAME`, `ADMIN_PASSWORD` — admin bootstrap (`scripts/seed-admin.mjs`)
+- `HOST`, `PORT`, `APP_BASE_URL` — Nuxt runtime

@@ -6,20 +6,22 @@
   />
 
   <aside :class="[
-      'fixed top-0 left-0 h-full w-30 md:w-36 bg-gray-900 text-gray-300 flex flex-col p-4 shadow-lg z-40 transition-transform',
+      'fixed top-0 left-0 h-full bg-gray-900 text-gray-300 flex flex-col p-4 shadow-lg z-40 transition-[width,transform] duration-200',
+      collapsed ? 'md:w-18' : 'md:w-40',
+      'w-18',
       open ? 'translate-x-0' : '-translate-x-full',
       'md:translate-x-0'
     ]"
   >
-    <ul 
-      class="flex flex-col mt-2 mb-2 h-full"
+    <ul
+      class="flex flex-1 flex-col mt-2 mb-4 sm:mb-2"
       :class="items.length > 6 ? 'justify-between' : 'justify-start gap-4'"
     >
       <li
         v-for="item in items"
         :key="item.name"
         @click="handleClick(item.name)"
-        class="cursor-pointer flex flex-col items-center p-1 md:p-3 rounded-lg"
+        class="cursor-pointer flex flex-col items-center rounded-lg p-1 md:p-3"
       >
         <div
           :class="[
@@ -29,31 +31,76 @@
               : 'bg-gray-800 text-gray-400'
           ]"
         >
-          <Icon :name="item.icon" class="w-10 h-10" aria-hidden="true" />
+          <Icon :name="item.icon" size="30" class="shrink-0" aria-hidden="true" />
         </div>
 
-        <span class="mt-2 text-sm text-gray-300 font-medium">
-          {{ item.label }}
+        <span v-if="!collapsed" class="mt-2 text-sm text-gray-300 font-medium text-center">
+          {{ t(item.labelKey) }}
         </span>
       </li>
     </ul>
+
+    <div class="mt-auto flex flex-col gap-2">
+      <button
+        v-if="user"
+        type="button"
+        :class="[
+          'flex mb-4 sm:mb-0 items-center justify-center gap-2 rounded-lg bg-gray-800 px-3 py-2 text-sm font-medium text-gray-300 transition hover:bg-gray-700 disabled:cursor-wait disabled:opacity-60 cursor-pointer',
+          isRefreshing ? 'animate-pulse' : '',
+        ]"
+        :disabled="isRefreshing"
+        :aria-label="t('actions.refresh')"
+        :title="t('actions.refresh')"
+        @click="refreshCurrentPage"
+      >
+        <Icon
+          name="material-symbols:refresh-rounded"
+          :class="['h-5 w-5 shrink-0', isRefreshing ? 'animate-spin' : '']"
+          aria-hidden="true"
+        />
+        <span v-if="!collapsed">{{ t('actions.refresh') }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="hidden md:flex items-center justify-center gap-2 rounded-lg bg-gray-800 px-3 py-2 text-sm font-medium text-gray-300 transition hover:bg-gray-700 cursor-pointer"
+        :title="collapsed ? t('common.expandMenu') : t('common.collapseMenu')"
+        @click="$emit('toggle-collapse')"
+      >
+        <Icon
+          :name="collapsed ? 'material-symbols:keyboard-double-arrow-right-rounded' : 'material-symbols:keyboard-double-arrow-left-rounded'"
+          class="h-5 w-5 shrink-0"
+          aria-hidden="true"
+        />
+        <span v-if="!collapsed">{{ t('common.collapseMenu') }}</span>
+      </button>
+    </div>
   </aside>
 </template>
 
 <script setup lang="ts">
 import { usePage } from '~/composables/usePage'
+import { useI18n } from '~/composables/useI18n'
+import { useAppRefresh } from '~/composables/useAppRefresh'
+import { useAuth } from '~/composables/useAuth'
 
 const props = defineProps<{
-  items: { name: string; label: string; icon: string }[]
+  items: { name: string; labelKey: string; icon: string }[]
   open: boolean
+  collapsed?: boolean
 }>()
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'toggle-collapse'])
 
 const { currentPage, setPage } = usePage()
+const { t } = useI18n()
+const { isRefreshing, refreshCurrentPage } = useAppRefresh()
+const { user } = useAuth()
+
+const collapsed = computed(() => props.collapsed === true)
 
 function handleClick(name: string) {
-  setPage(name)
+  setPage(name, name === currentPage.value ? { resetTabKey: Date.now() } : undefined)
   emit('close')
 }
 </script>

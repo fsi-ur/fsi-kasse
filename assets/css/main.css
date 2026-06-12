@@ -7,3 +7,94 @@ html {
     scrollbar-width: none;
     overscroll-behavior: none;
 }
+
+@layer components {
+    .input {
+        @apply w-full border rounded-md border-slate-300 border-solid p-2 text-sm bg-white;
+    }
+
+    .input:disabled {
+        @apply opacity-70;
+    }
+
+    .input:focus {
+        @apply outline-0 border-slate-700 shadow-sm;
+    }
+
+    .checkbox {
+        @apply cursor-pointer;
+    }
+
+    .checkbox:disabled {
+        @apply opacity-70 cursor-default;
+    }
+
+    .btn-primary {
+        @apply bg-orange-500 rounded-md py-2 px-4 text-white text-sm cursor-pointer;
+    }
+
+    .btn-primary:hover {
+        @apply bg-orange-600;
+    }
+
+    .btn-primary:disabled {
+        @apply opacity-50 cursor-not-allowed;
+    }
+
+    .btn-secondary {
+        @apply bg-slate-200 rounded-md py-2 px-4 text-black text-sm cursor-pointer;
+    }
+
+    .btn-secondary:hover {
+        @apply bg-slate-300
+    }
+
+    .btn-secondary:disabled {
+        @apply opacity-50 cursor-not-allowed;
+    }
+
+    .section-title {
+        @apply text-sm font-semibold text-slate-800 mb-1
+    }
+
+    .field {
+        @apply flex flex-col gap-1
+    }
+
+    .field label {
+        @apply text-xs text-slate-600
+    }
+}
+
+.input[type="date"],
+.input[type="time"],
+.input[type="datetime-local"] {
+    height: calc(1.25rem + 1rem + 2px);
+    min-height: 0;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    line-height: 1.25rem;
+    -webkit-appearance: none;
+    appearance: none;
+    box-sizing: border-box;
+}
+
+.input[type="date"]::-webkit-datetime-edit,
+.input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+.input[type="date"]::-webkit-date-and-time-value,
+.input[type="time"]::-webkit-datetime-edit,
+.input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+.input[type="time"]::-webkit-date-and-time-value,
+.input[type="datetime-local"]::-webkit-datetime-edit,
+.input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper,
+.input[type="datetime-local"]::-webkit-date-and-time-value {
+    min-height: 0;
+    padding: 0;
+    line-height: 1.25rem;
+}
+
+.input[type="date"]::-webkit-calendar-picker-indicator,
+.input[type="time"]::-webkit-calendar-picker-indicator,
+.input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    margin: 0;
+}

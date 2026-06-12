@@ -2,6 +2,7 @@ import { getCookie } from 'h3'
 import { getSessionByToken, touchSession, inactivityMinutes, deleteSessionByToken } from './auth'
 import { getUserPermissions, getUserRoleIds } from './permissions'
 import { getOverlayRole } from './roles'
+import { isConnectedAccountingMode } from './db'
 import { normalizeBigInt } from '~/server/utils/normalize'
 import type { User } from '~/types/user'
 
@@ -17,9 +18,26 @@ interface SessionError {
 
 export type SessionResponse = SessionSuccess | SessionError
 
+function getSessionCookieNames() {
+  const cookieNames = [process.env.SESSION_COOKIE_NAME || 'app_session']
+
+  // In connected mode sessions live in the shared accounting database, so a
+  // session created by the accounting application is also valid here. Accept
+  // its cookie as fallback to allow managing the cash register from there.
+  const accountingCookieName = process.env.ACCOUNTING_SESSION_COOKIE_NAME
+  if (isConnectedAccountingMode() && accountingCookieName && !cookieNames.includes(accountingCookieName)) {
+    cookieNames.push(accountingCookieName)
+  }
+
+  return cookieNames
+}
+
 export async function getCurrentUserFromEvent(event: any, touch: boolean): Promise<SessionResponse> {
-  const cookieName = process.env.SESSION_COOKIE_NAME || 'app_session'
-  const token = getCookie(event, cookieName)
+  let token: string | undefined
+  for (const cookieName of getSessionCookieNames()) {
+    token = getCookie(event, cookieName)
+    if (token) break
+  }
 
   if (!token) return { ok: false, error: 'Missing token' }
 

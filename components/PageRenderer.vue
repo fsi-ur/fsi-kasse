@@ -1,6 +1,6 @@
 <template>
   <div class="w-full">
-    <component v-if="loaded" :is="currentComponent" @open-menu="$emit('openMenu')"/>
+    <component v-if="loaded" :is="currentComponent" :key="currentPage" @open-menu="$emit('openMenu')"/>
   </div>
 </template>
 
@@ -12,10 +12,6 @@ import CheckoutPage from '~/components/pages/Checkout.vue'
 import HistoryPage from '~/components/pages/History.vue'
 import FachschaftPage from '~/components/pages/Fachschaft.vue'
 import OverviewPage from '~/components/pages/Overview.vue'
-import ItemsPage from '~/components/pages/Items.vue'
-import CashiersPage from '~/components/pages/Cashiers.vue'
-import EventsPage from '~/components/pages/Events.vue'
-import UsersPage from '~/components/pages/Users.vue'
 import LoginPage from '~/components/pages/Login.vue'
 import LogoutPage from '~/components/pages/Logout.vue'
 import SettingsPage from '~/components/pages/Settings.vue'
@@ -37,10 +33,6 @@ const pages: Record<string, Page> = {
   History: { component: HistoryPage, allowedRoles: ['user', 'admin'] },
   Fachschaft: { component: FachschaftPage, allowedRoles: ['user', 'admin'] },
   Overview: { component: OverviewPage, allowedRoles: ['admin'] },
-  Items: { component: ItemsPage, allowedRoles: ['admin'] },
-  Cashiers: { component: CashiersPage, allowedRoles: ['admin'] },
-  Events: { component: EventsPage, allowedRoles: ['admin'] },
-  Users: { component: UsersPage, allowedRoles: ['admin'] },
   Login: { component: LoginPage, allowedRoles: ['guest'] },
   Logout: { component: LogoutPage, allowedRoles: ['user'] },
   Settings: { component: SettingsPage, allowedRoles: ['admin'] },

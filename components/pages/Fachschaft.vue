@@ -1,7 +1,7 @@
 <template>
-  <Page headline1="Fachschaft Payments" @open-menu="$emit('openMenu')">
+  <Page :headline1="t('fachschaft.title')" @open-menu="$emit('openMenu')">
     <template #header>
-      <div class="flex flex-col md:flex-row md:gap-4">
+      <div class="ml-auto flex flex-col gap-2 md:flex-row md:gap-4">
         <MenuSelectCashier />
         <MenuSelectEvent />
       </div>
@@ -9,43 +9,43 @@
 
     <template #cards>
       <div class="col-span-12 p-4 bg-white shadow-lg rounded-xl flex flex-wrap gap-4 items-end">
-        <div>
-          <label class="block mb-1 text-md">Member Name</label>
-          <select
-            v-model="selectedMember"
-            class="p-2 w-64 outline outline-gray-300 bg-gray-100 rounded-md"
-          >
-            <option disabled value="">Choose member</option>
-            <option v-for="m in members" :key="m.id" :value="m.id">
-              {{ m.name }}
-            </option>
-          </select>
+        <div class="field w-64">
+          <label>{{ t('fachschaft.memberName') }}</label>
+          <CommonSearchSelect
+            v-model="memberQuery"
+            :options="memberOptions"
+            :placeholder="t('fachschaft.memberPlaceholder')"
+            :empty-text="t('fachschaft.noMembers')"
+            :selected-label="selectedMemberLabel"
+            @select="onMemberSelect"
+            @clear-selection="selectedMember = ''"
+          />
         </div>
         <button
-          class="px-4 py-2 bg-cyan-600 text-white rounded-md hover:bg-cyan-700 cursor-pointer disabled:bg-gray-400"
+          class="btn-primary"
           :disabled="!selectedMember || !selectedCashier || !selectedEvent"
           @click="showConfirm = true"
         >
-          Mark Paid (10€)
+          {{ t('fachschaft.markPaid', { amount: formattedAmount }) }}
         </button>
       </div>
 
       <div class="col-span-12 bg-white p-4 rounded-xl shadow-lg">
-        <h2 class="text-xl font-semibold mb-4">Payment History</h2>
+        <h2 class="text-lg font-semibold mb-4">{{ t('fachschaft.paymentHistory') }}</h2>
         <ul>
           <li
             v-for="p in payments"
             :key="p.id"
-            class="py-2 border-b border-gray-300"
+            class="py-2 border-b border-slate-200"
           >
             <div class="font-semibold">{{ p.member }}</div>
             <div class="text-sm text-gray-500">
-              Cashier: {{ p.cashier }} — {{ formatDate(p.created_at) }}
+              {{ t('history.cashier', { name: p.cashier }) }} — {{ formatDate(p.created_at) }}
             </div>
           </li>
         </ul>
         <div v-if="payments.length === 0" class="text-gray-400">
-          No payments yet.
+          {{ t('fachschaft.noPayments') }}
         </div>
       </div>
     </template>
@@ -53,22 +53,26 @@
 
   <FormConfirmation
     v-if="showConfirm"
-    headline="Confirm Payment"
+    :headline="t('fachschaft.confirmTitle')"
     @confirm="markPaid"
     @cancel="showConfirm = false"
   >
     <template #message>
-      <p class="text-center mb-6">
-        Did {{ members.find((m : any) => m.id === selectedMember).name }} really pay the 10€?<br />
-      </p>
+      {{ t('fachschaft.confirmQuestion', { name: selectedMemberLabel, amount: formattedAmount }) }}
     </template>
   </FormConfirmation>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from '~/composables/useI18n'
+import { useToast } from '~/composables/useToast'
+import { useCashRegisterSettings } from '~/composables/useCashRegisterSettings'
+import type { SearchSelectOption } from '~/components/Common/SearchSelect.vue'
+
 const members = ref<any[]>([])
 const payments = ref<any[]>([])
 const selectedMember = ref<number | string>('')
+const memberQuery = ref('')
 
 const showConfirm = ref(false)
 
@@ -77,24 +81,57 @@ const emit = defineEmits<{
 }>()
 
 const { selectedCashier, selectedEvent } = useCheckout()
+const { t, locale } = useI18n()
+const toast = useToast()
+const { settings, loadSettings } = useCashRegisterSettings()
+const { onRefresh } = useAppRefresh()
 
-function formatDate(ts: string | Date) {
-  return new Date(ts).toLocaleString('de-DE')
+const formattedAmount = computed(() => settings.value.fachschaft_payment_amount.toLocaleString(locale.value))
+
+const memberOptions = computed<SearchSelectOption[]>(() => members.value
+  .filter(member => member.is_active === 1 || member.is_active === true)
+  .map(member => ({
+    key: member.id,
+    label: String(member.name),
+    value: member.id,
+  })))
+
+const selectedMemberLabel = computed(() => {
+  const member = members.value.find(entry => entry.id === selectedMember.value)
+  return member ? String(member.name) : ''
+})
+
+function onMemberSelect(value: unknown) {
+  selectedMember.value = Number(value)
+  memberQuery.value = ''
 }
 
-onMounted(async () => {
+function formatDate(ts: string | Date) {
+  return new Date(ts).toLocaleString(locale.value)
+}
+
+async function loadMembers() {
   const res = await $fetch('/api/cashiers', { method: 'GET' })
   if (res.ok) {
     members.value = 'cashiers' in res ? res.cashiers as any[] : []
   }
+}
 
-  await loadPayments()
-})
+async function reload() {
+  await Promise.allSettled([
+    loadSettings(true),
+    loadMembers(),
+    loadPayments(),
+  ])
+}
+
+onMounted(reload)
+onRefresh(reload)
 
 async function markPaid() {
   showConfirm.value = false
 
-  if (!selectedCashier.value || !selectedEvent || !selectedMember.value) return
+  if (!selectedCashier.value || !selectedEvent.value || !selectedMember.value) return
 
   const res = await $fetch('/api/fachschaft/pay', {
     method: 'POST',
@@ -104,6 +141,10 @@ async function markPaid() {
       event_id: selectedEvent.value,
     }
   })
+
+  if (!res.ok) {
+    toast.error('error' in res && res.error ? String(res.error) : t('fachschaft.payFailed'))
+  }
 
   await loadPayments()
 }

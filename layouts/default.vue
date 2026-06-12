@@ -1,10 +1,18 @@
 <template>
   <div class="flex min-h-screen">
-    <MenuMain :items="filteredMenuItems" :open="menuOpen" @close="menuOpen = false" />
+    <MenuMain
+      :items="filteredMenuItems"
+      :open="menuOpen"
+      :collapsed="menuCollapsed"
+      @close="menuOpen = false"
+      @toggle-collapse="toggleDesktopMenu"
+    />
 
-    <main class="flex-1 md:ml-36 p-6 bg-gray-100" @click="handleClick">
+    <main :class="['flex-1 p-6 bg-gray-100 transition-[margin] duration-200', menuCollapsed ? 'md:ml-18' : 'md:ml-40']" @click="handleClick">
       <PageRenderer @open-menu="handleOpen" />
     </main>
+
+    <ToastViewport />
   </div>
 </template>
 
@@ -15,18 +23,16 @@ const { user, fetchSession } = useAuth()
 
 const menuOpen = ref(false)
 const openMenu = ref(false)
+const menuCollapsed = ref(false)
+const desktopMediaQuery = ref<MediaQueryList | null>(null)
 
 const menuItems = [
-  { name: 'Checkout', label: 'Checkout', icon: 'ph:shopping-cart-simple', roles: ['user', 'admin'] },
-  { name: 'History', label: 'History', icon: 'ph:clock-counter-clockwise', roles: ['user', 'admin'] },
-  { name: 'Fachschaft', label: 'Fachschaft', icon: 'fa7-solid:money-bill-1', roles: ['user', 'admin'] },
-  { name: 'Overview', label: 'Overview', icon: 'streamline-flex:subscription-cashflow', roles: ['admin'] },
-  { name: 'Items', label: 'Items', icon: 'ph:package', roles: ['admin'] },
-  { name: 'Cashiers', label: 'Cashiers', icon: 'ph:storefront', roles: ['admin'] },
-  { name: 'Events', label: 'Events', icon: 'material-symbols:calendar-month', roles: ['admin'] },
-  { name: 'Users', label: 'Users', icon: 'ph:users-three', roles: ['admin'] },
-  { name: 'Logout', label: 'Logout', icon: 'fe:logout', roles: ['user'] },
-  { name: 'Settings', label: 'Settings', icon: 'material-symbols:settings-outline', roles: ['admin'] },
+  { name: 'Checkout', labelKey: 'pages.checkout', icon: 'ph:shopping-cart-simple', roles: ['user', 'admin'] },
+  { name: 'History', labelKey: 'pages.history', icon: 'ph:clock-counter-clockwise', roles: ['user', 'admin'] },
+  { name: 'Fachschaft', labelKey: 'pages.fachschaft', icon: 'fa7-solid:money-bill-1', roles: ['user', 'admin'] },
+  { name: 'Overview', labelKey: 'pages.overview', icon: 'streamline-flex:subscription-cashflow', roles: ['admin'] },
+  { name: 'Logout', labelKey: 'pages.logout', icon: 'fe:logout', roles: ['user'] },
+  { name: 'Settings', labelKey: 'pages.settings', icon: 'material-symbols:settings-outline', roles: ['admin'] },
 ]
 
 const filteredMenuItems = computed(() => {
@@ -50,7 +56,31 @@ function handleClick() {
   }
 }
 
+function syncMenuMode(event?: MediaQueryList | MediaQueryListEvent) {
+  const matchesDesktop = event?.matches ?? desktopMediaQuery.value?.matches ?? false
+  if (matchesDesktop) {
+    menuOpen.value = false
+    return
+  }
+
+  menuCollapsed.value = true
+  menuOpen.value = false
+  openMenu.value = false
+}
+
+function toggleDesktopMenu() {
+  if (!desktopMediaQuery.value?.matches) return
+  menuCollapsed.value = !menuCollapsed.value
+}
+
 onMounted(() => {
   fetchSession()
+  desktopMediaQuery.value = window.matchMedia('(min-width: 768px)')
+  syncMenuMode(desktopMediaQuery.value)
+  desktopMediaQuery.value.addEventListener('change', syncMenuMode)
+})
+
+onBeforeUnmount(() => {
+  desktopMediaQuery.value?.removeEventListener('change', syncMenuMode)
 })
 </script>

@@ -1,7 +1,7 @@
 <template>
-  <Page headline1="Checkout" @open-menu="$emit('openMenu')">
+  <Page :headline1="t('checkout.title')" @open-menu="$emit('openMenu')">
     <template #header>
-      <div class="flex flex-col md:flex-row md:gap-4">
+      <div class="ml-auto flex flex-col gap-2 md:flex-row md:gap-4">
         <MenuSelectCashier />
         <MenuSelectEvent />
       </div>
@@ -9,36 +9,36 @@
 
     <template #cards>
       <div class="col-span-12 lg:col-span-6 xl:col-span-8 bg-white p-4 rounded-xl shadow-lg">
-        <h2 class="text-xl font-semibold mb-4">Items</h2>
+        <h2 class="text-lg font-semibold mb-4">{{ t('checkout.items') }}</h2>
         <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
           <div
             v-for="item in items"
             :key="item.id"
-            class="bg-gray-200 p-4 rounded-lg cursor-pointer hover:bg-gray-300"
+            class="bg-gray-100 border border-slate-200 p-4 rounded-lg cursor-pointer transition-colors hover:bg-gray-200"
             @click="addToOrder(item)"
           >
             <div class="text-lg font-bold">{{ item.name }}</div>
-            <div class="text-sm">{{ item.price }} €</div>
+            <div class="text-sm text-slate-600">{{ item.price }} €</div>
           </div>
         </div>
       </div>
 
       <div class="col-span-12 lg:col-span-6 xl:col-span-4 bg-white p-4 rounded-xl shadow-lg">
-        <h2 class="text-xl font-semibold mb-4">Current Order</h2>
+        <h2 class="text-lg font-semibold mb-4">{{ t('checkout.currentOrder') }}</h2>
         <div v-if="orderItems.length === 0" class="text-gray-400">
-          No items added yet.
+          {{ t('checkout.noItems') }}
         </div>
 
         <ul>
           <li
             v-for="line in orderItems"
             :key="line.id"
-            class="grid grid-cols-6 items-center py-2 border-b border-gray-700"
+            class="grid grid-cols-6 items-center py-2 border-b border-slate-200"
           >
             <span class="text-left col-span-1">{{ line.quantity }}</span>
             <span class="text-left col-span-2">{{ line.name }}
               <span v-if="line.deposit > 0" class="text-xs text-gray-500">
-                (+ {{ line.deposit }} € deposit)
+                {{ t('checkout.depositSuffix', { amount: line.deposit }) }}
               </span>
             </span>
             <span class="text-right font-semibold col-span-2">
@@ -59,43 +59,46 @@
 
         <div class="flex flex-rows flex-wrap justify-between">
           <div class="mt-4 font-bold text-lg">
-            Total: {{ total.toFixed(2) }} €
+            {{ t('common.total') }}: {{ total.toFixed(2) }} €
           </div>
           <button
             @click="isFachschaft = !isFachschaft"
-            class="mt-4 px-4 rounded-md shadow-md text-sm cursor-pointer"
+            class="mt-4 px-4 py-2 rounded-md text-sm cursor-pointer transition-colors"
             :class="isFachschaft
               ? 'bg-green-600 text-white'
-              : 'bg-gray-300 text-gray-800'"
+              : 'bg-slate-200 text-black hover:bg-slate-300'"
           >
-            {{ isFachschaft ? 'Fachschaft Order ✓' : 'Mark as Fachschaft Order' }}
+            {{ isFachschaft ? t('checkout.fachschaftMarked') : t('checkout.markFachschaft') }}
           </button>
         </div>
 
         <button
-          class="mt-4 w-full bg-cyan-600 hover:bg-cyan-700 text-white cursor-pointer p-3 rounded-lg disabled:bg-gray-600"
+          class="btn-primary mt-4 w-full p-3"
           :disabled="orderItems.length === 0 || !selectedCashier || !selectedEvent"
           @click="showConfirm = true"
         >
-          Save Order
+          {{ t('checkout.saveOrder') }}
         </button>
       </div>
     </template>
   </Page>
-  <FormConfirmation 
-    v-if="showConfirm" 
-    headline="Confirm Order"
+  <FormConfirmation
+    v-if="showConfirm"
+    :headline="t('checkout.confirmTitle')"
     @confirm="finishOrder"
     @cancel="showConfirm = false"
   >
     <template #message>
-      Do you really want to create this order?<br />
-      <span class="font-bold">Total: {{ total.toFixed(2) }} €</span>
+      {{ t('checkout.confirmQuestion') }}<br />
+      <span class="font-bold">{{ t('common.total') }}: {{ total.toFixed(2) }} €</span>
     </template>
   </FormConfirmation>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from '~/composables/useI18n'
+import { useToast } from '~/composables/useToast'
+
 const items = ref<any[]>([])
 const showConfirm = ref(false)
 
@@ -104,14 +107,20 @@ const emit = defineEmits<{
 }>()
 
 const { selectedCashier, selectedEvent, orderItems, isFachschaft } = useCheckout()
+const { t } = useI18n()
+const toast = useToast()
+const { onRefresh } = useAppRefresh()
 
-onMounted(async () => {
+async function loadItems() {
   const res = await $fetch('/api/items', { method: 'GET' })
-  if (res.ok) { 
+  if (res.ok) {
     const allItems = 'items' in res ? res.items as any[] : []
     items.value = allItems.filter(i => i.is_active === 1 || i.is_active === true)
   }
-})
+}
+
+onMounted(loadItems)
+onRefresh(loadItems)
 
 function addToOrder(item: any) {
   const existing = orderItems.value.find((it) => it.id === item.id)
@@ -151,6 +160,9 @@ async function finishOrder() {
   if (res.ok) {
     orderItems.value = []
     isFachschaft.value = false
+    toast.success(t('checkout.saved'))
+  } else {
+    toast.error('error' in res && res.error ? String(res.error) : t('checkout.saveFailed'))
   }
 }
 </script>

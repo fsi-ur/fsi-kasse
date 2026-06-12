@@ -1,70 +1,65 @@
 <template>
-  <Page headline1="Settings" @open-menu="$emit('openMenu')">
+  <Page :headline1="t('settings.title')" flush-header-with-cards @open-menu="$emit('openMenu')">
+    <template #header="{ headerContainerRef, headlineGroupRef }">
+      <CommonTabOverview
+        v-model="currentTab"
+        :tabs="tabs"
+        :header-container-ref="headerContainerRef"
+        :headline-group-ref="headlineGroupRef"
+      />
+    </template>
+
     <template #cards>
-      <div class="flex gap-3 col-span-12">
-        <button
-          @click="exportCSV"
-          class="bg-gray-700 hover:bg-gray-800 text-white px-3 py-2 rounded-md cursor-pointer"
-        >
-          Export CSV
-        </button>
-
-        <button
-          @click="addEvents"
-          class="bg-gray-700 hover:bg-gray-800 text-white px-3 py-2 rounded-md cursor-pointer"
-        >
-          Change DB schema to support Events
-        </button>
-
-        <button
-          @click="showForm = true"
-          class="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-2 rounded-md cursor-pointer"
-        >
-          Logout
-        </button>
-      </div>
+      <component :is="activeComponent" />
     </template>
   </Page>
-
-  <FormConfirmation v-if="showForm" headline="Logout" @cancel="showForm = false" @confirm="confirm">
-    <template #message>
-      <p>Do you really want to log out?</p>
-    </template>
-  </FormConfirmation>
 </template>
-<script setup lang="ts">
-const { setPage } = usePage()
-const { logout } = useAuth()
 
-const emit = defineEmits<{
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from '~/composables/useI18n'
+import { usePage } from '~/composables/usePage'
+import SettingsGeneral from './settings/General.vue'
+import SettingsItems from './settings/Items.vue'
+import SettingsCashiers from './settings/Cashiers.vue'
+import SettingsEvents from './settings/Events.vue'
+import SettingsUsers from './settings/Users.vue'
+
+defineEmits<{
   (e: 'openMenu'): void
 }>()
 
-const showForm = ref(false)
+type SettingsTab = 'general' | 'items' | 'cashiers' | 'events' | 'users'
 
-function confirm() {
-  setPage('Checkout')
-  logout()
-}
+const currentTab = useState<SettingsTab>('settings-overview-current-tab', () => 'general')
+const { t } = useI18n()
+const { pageMeta } = usePage()
 
-async function exportCSV() {
-  const res = await fetch('/api/export/csv')
+const tabs = computed(() => [
+  { key: 'general', label: t('settings.tabs.general') },
+  { key: 'items', label: t('settings.tabs.items') },
+  { key: 'cashiers', label: t('settings.tabs.cashiers') },
+  { key: 'events', label: t('settings.tabs.events') },
+  { key: 'users', label: t('settings.tabs.users') },
+])
 
-  if (!res.ok) return
+const activeComponent = computed(() => {
+  switch (currentTab.value) {
+    case 'items':
+      return SettingsItems
+    case 'cashiers':
+      return SettingsCashiers
+    case 'events':
+      return SettingsEvents
+    case 'users':
+      return SettingsUsers
+    case 'general':
+    default:
+      return SettingsGeneral
+  }
+})
 
-  const blob = await res.blob()
-  const url = window.URL.createObjectURL(blob)
-
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `kassensystem-export-${new Date().toISOString().slice(0,10)}.csv`
-  a.click()
-
-  window.URL.revokeObjectURL(url)
-}
-
-async function addEvents() {
-  const res = await $fetch('/api/changeSchema/addEvents')
-  console.log(res)
-}
+watch(() => pageMeta.value?.resetTabKey, (resetTabKey) => {
+  if (resetTabKey) currentTab.value = 'general'
+}, { immediate: true })
 </script>
