@@ -1,4 +1,4 @@
-import mariadb from 'mariadb'
+import * as mariadb from 'mariadb'
 
 const {
   DB_HOST = 'db',

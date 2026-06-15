@@ -1,4 +1,4 @@
-import mariadb from 'mariadb'
+import * as mariadb from 'mariadb'
 
 // Creates the restricted database user the accounting app (Buchhaltung) uses
 // to read cash register data for its per-event overview. The user gets

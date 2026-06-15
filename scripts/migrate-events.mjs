@@ -1,4 +1,4 @@
-import mariadb from 'mariadb'
+import * as mariadb from 'mariadb'
 
 // Idempotent replacement for the old "Change DB schema to support Events"
 // settings button: creates the events table, adds event_id columns with
