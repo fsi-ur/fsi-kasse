@@ -24,6 +24,9 @@ services:
       - APP_BASE_URL=${APP_BASE_URL:-/}
     ports:
       - "3001:3001"
+    networks:
+      - default
+      - fsi-shared
     command: sh -c "npm ci && node scripts/migrate-events.mjs && node scripts/migrate-app-settings.mjs && node scripts/create-connection-db-user.mjs && node scripts/seed-admin.mjs && npm run build && node .output/server/index.mjs"
     depends_on:
       db:
@@ -51,3 +54,8 @@ services:
 
 volumes:
   db_data:
+
+networks:
+  fsi-shared:
+    external: true
+    name: fsi-shared
