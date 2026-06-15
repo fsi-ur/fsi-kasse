@@ -3,14 +3,14 @@ import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 
 const {
-  DB_HOST = 'db',
+  DB_HOST = 'kasse-db',
   DB_PORT = '3306',
   DB_USER = 'fsi',
   DB_PASSWORD = 'fsi_password',
   DB_NAME = 'fsi_kasse',
   DB_CONN_LIMIT = '5',
-  ACCOUNTING_DB_HOST = DB_HOST,
-  ACCOUNTING_DB_PORT = DB_PORT,
+  ACCOUNTING_DB_HOST = 'buchhaltung-db',
+  ACCOUNTING_DB_PORT = '3307',
   ACCOUNTING_DB_USER = DB_USER,
   ACCOUNTING_DB_PASSWORD = DB_PASSWORD,
   ACCOUNTING_DB_NAME = 'fsi_buchhaltung',

@@ -1,7 +1,7 @@
 import * as mariadb from 'mariadb'
 
 const {
-  DB_HOST = 'db',
+  DB_HOST = 'kasse-db',
   DB_PORT = '3306',
   DB_USER = 'fsi',
   DB_PASSWORD = 'fsi_password',

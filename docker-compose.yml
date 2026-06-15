@@ -10,11 +10,14 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=3001
-      - DB_HOST=${DB_HOST:-db}
+      - DB_HOST=kasse-db
+      - DB_PORT=3306
       - DB_USER=${DB_USER:-fsi}
       - DB_PASSWORD=${DB_PASSWORD:-fsi_password}
       - DB_NAME=${DB_NAME:-fsi_kasse}
       - DB_CONN_LIMIT=${DB_CONN_LIMIT:-5}
+      - ACCOUNTING_DB_HOST=buchhaltung-db
+      - ACCOUNTING_DB_PORT=3307
       - SESSION_COOKIE_NAME=${SESSION_COOKIE_NAME:-fsi_session}
       - SESSION_SECRET=${SESSION_SECRET:-dev_change_me}
       - SESSION_INACTIVITY_MINUTES=${SESSION_INACTIVITY_MINUTES:-30}
@@ -45,6 +48,13 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "3307:3306"
+    networks:
+      default:
+        aliases:
+          - kasse-db-local
+      fsi-shared:
+        aliases:
+          - kasse-db
     healthcheck:
       test: ["CMD", "mariadb", "-u", "${DB_USER:-fsi}", "-p${DB_PASSWORD:-fsi_password}", "-h", "localhost", "-e", "SELECT 1;"]
       interval: 10s

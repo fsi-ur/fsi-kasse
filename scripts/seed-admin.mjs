@@ -5,7 +5,7 @@ import { runAuthRoleMigration } from './auth-role-migration.mjs'
 const {
   ADMIN_USERNAME,
   ADMIN_PASSWORD,
-  DB_HOST = 'db',
+  DB_HOST = 'kasse-db',
   DB_USER = 'fsi',
   DB_PASSWORD = 'fsi_password',
   DB_NAME = 'fsi_kasse',

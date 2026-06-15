@@ -6,7 +6,7 @@ import * as mariadb from 'mariadb'
 // script is safe; it keeps the password and grants in sync.
 
 const {
-  DB_HOST = 'db',
+  DB_HOST = 'kasse-db',
   DB_PORT = '3306',
   DB_NAME = 'fsi_kasse',
   DB_ROOT_PASSWORD,

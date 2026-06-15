@@ -6,7 +6,7 @@ import * as mariadb from 'mariadb'
 // with a default event before making the columns NOT NULL.
 
 const {
-  DB_HOST = 'db',
+  DB_HOST = 'kasse-db',
   DB_PORT = '3306',
   DB_USER = 'fsi',
   DB_PASSWORD = 'fsi_password',
