@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
   if (!current.ok) return current
 
   const rows: any[] = await accountingQuery(`
-    SELECT id, username, is_active, created_at
+    SELECT id, username, is_active, NULL AS created_at
     FROM users
     ORDER BY id ASC
   `)

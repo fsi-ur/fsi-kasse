@@ -11,10 +11,7 @@ const ROLE_TABLES = [
     name VARCHAR(127) NOT NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     is_default TINYINT(1) NOT NULL DEFAULT 0,
-    description TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by BIGINT UNSIGNED NOT NULL,
-    FOREIGN KEY (created_by) REFERENCES users(id)
+    description TEXT
   )
   `,
   `
@@ -92,15 +89,24 @@ async function ensureRole(conn, role, createdBy) {
   let roleId = existing.length ? Number(existing[0].id) : null
 
   if (!roleId) {
-    if (!createdBy) return null
+    const hasCreatedByColumn = await columnExists(conn, 'roles', 'created_by')
+    if (hasCreatedByColumn && !createdBy) return null
 
-    const result = await conn.query(
-      `
-      INSERT INTO roles (code, name, is_active, is_default, description, created_by)
-      VALUES (?, ?, 1, ?, NULL, ?)
-      `,
-      [role.code, role.name, role.isDefault, createdBy],
-    )
+    const result = hasCreatedByColumn
+      ? await conn.query(
+          `
+          INSERT INTO roles (code, name, is_active, is_default, description, created_by)
+          VALUES (?, ?, 1, ?, NULL, ?)
+          `,
+          [role.code, role.name, role.isDefault, createdBy],
+        )
+      : await conn.query(
+          `
+          INSERT INTO roles (code, name, is_active, is_default, description)
+          VALUES (?, ?, 1, ?, NULL)
+          `,
+          [role.code, role.name, role.isDefault],
+        )
 
     roleId = Number(result.insertId)
   }

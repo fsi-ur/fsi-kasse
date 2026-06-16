@@ -113,10 +113,7 @@ async function fetchAccountingEvents(conn) {
       starts_at,
       ends_at,
       location,
-      CASE
-        WHEN ends_at >= NOW() THEN 1
-        ELSE 0
-      END AS is_active
+      1 AS is_active
     FROM events
     ORDER BY starts_at DESC, ends_at DESC, name ASC, id ASC
   `)

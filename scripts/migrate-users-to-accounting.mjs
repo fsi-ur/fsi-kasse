@@ -100,7 +100,7 @@ async function confirm(question, defaultValue = true) {
 
 async function fetchUsers(conn) {
   const rows = await conn.query(
-    `SELECT id, username, password_hash, is_active, created_at
+    `SELECT id, username, password_hash, is_active
      FROM users
      ORDER BY id ASC`
   )
@@ -110,7 +110,6 @@ async function fetchUsers(conn) {
     username: String(row.username),
     password_hash: String(row.password_hash),
     is_active: toBoolean(row.is_active),
-    created_at: row.created_at,
   }))
 }
 
@@ -157,7 +156,7 @@ async function getEffectivePermissions(conn, userId) {
 
 async function findAccountingUserById(conn, userId) {
   const rows = await conn.query(
-    `SELECT id, username, password_hash, is_active, created_at
+    `SELECT id, username, password_hash, is_active
      FROM users
      WHERE id = ?
      LIMIT 1`,
@@ -171,7 +170,6 @@ async function findAccountingUserById(conn, userId) {
     username: String(rows[0].username),
     password_hash: String(rows[0].password_hash),
     is_active: toBoolean(rows[0].is_active),
-    created_at: rows[0].created_at,
   }
 }
 
