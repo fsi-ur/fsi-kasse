@@ -34,7 +34,7 @@ services:
     networks:
       - default
       - fsi-shared
-    command: sh -c "rm -rf .output .nuxt node_modules/.cache/nuxt && npm ci && npm run build && npm run start"
+    command: sh -c "rm -rf .output .nuxt node_modules/.cache/nuxt && npm ci && npm run setup:deploy && npm run build && npm run start"
     depends_on:
       db:
         condition: service_healthy
