@@ -8,7 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "start": "node .output/server/index.mjs",
-    "setup:deploy": "node scripts/migrate-events.mjs && node scripts/migrate-app-settings.mjs && node scripts/create-connection-db-user.mjs && node scripts/seed-admin.mjs",
+    "setup:deploy": "node scripts/setup-deploy.mjs",
     "setup:migrate:events": "node --env-file=.env scripts/migrate-events.mjs",
     "setup:migrate:app-settings": "node --env-file=.env scripts/migrate-app-settings.mjs",
     "setup:migrate:users-to-accounting": "node --env-file=.env scripts/migrate-users-to-accounting.mjs",
