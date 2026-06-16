@@ -10,6 +10,8 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=3001
+      - NITRO_HOST=0.0.0.0
+      - NITRO_PORT=3001
       - DB_HOST=kasse-db
       - DB_PORT=3306
       - DB_USER=${DB_USER:-fsi}
@@ -27,10 +29,12 @@ services:
       - APP_BASE_URL=${APP_BASE_URL:-/}
     ports:
       - "3001:3001"
+    expose:
+      - "3001"
     networks:
       - default
       - fsi-shared
-    command: sh -c "rm -rf .output .nuxt node_modules/.cache/nuxt && npm ci && node scripts/migrate-events.mjs && node scripts/migrate-app-settings.mjs && node scripts/create-connection-db-user.mjs && node scripts/seed-admin.mjs && npm run build && npm run start"
+    command: sh -c "rm -rf .output .nuxt node_modules/.cache/nuxt && npm ci && npm run build && npm run start"
     depends_on:
       db:
         condition: service_healthy
