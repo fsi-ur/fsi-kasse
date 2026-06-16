@@ -7,6 +7,7 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
+    "start": "node .output/server/index.mjs",
     "setup:migrate:events": "node --env-file=.env scripts/migrate-events.mjs",
     "setup:migrate:app-settings": "node --env-file=.env scripts/migrate-app-settings.mjs",
     "setup:migrate:users-to-accounting": "node --env-file=.env scripts/migrate-users-to-accounting.mjs",

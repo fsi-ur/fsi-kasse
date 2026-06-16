@@ -30,7 +30,7 @@ services:
     networks:
       - default
       - fsi-shared
-    command: sh -c "npm ci && node scripts/migrate-events.mjs && node scripts/migrate-app-settings.mjs && node scripts/create-connection-db-user.mjs && node scripts/seed-admin.mjs && npm run build && node .output/server/index.mjs"
+    command: sh -c "rm -rf .output .nuxt node_modules/.cache/nuxt && npm ci && node scripts/migrate-events.mjs && node scripts/migrate-app-settings.mjs && node scripts/create-connection-db-user.mjs && node scripts/seed-admin.mjs && npm run build && npm run start"
     depends_on:
       db:
         condition: service_healthy
