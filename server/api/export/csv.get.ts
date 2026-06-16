@@ -9,6 +9,7 @@ export default defineEventHandler(async (event) => {
   const rows = await query(`
     SELECT
       o.id AS order_id,
+      e.name AS event,
       o.created_at,
       o.fachschaft,
       c.name AS cashier,
@@ -20,10 +21,11 @@ export default defineEventHandler(async (event) => {
     JOIN cashiers c ON o.cashier_id = c.id
     JOIN order_items oi ON oi.order_id = o.id
     JOIN items i ON oi.item_id = i.id
+    JOIN events e ON e.id = o.event_id
     ORDER BY o.created_at DESC
   `)
 
-  let csv = 'Order ID,Date,Cashier,Fachschaft,Item,Quantity,Price,Deposit,Total'
+  let csv = 'Order ID,Event,Date,Cashier,Fachschaft,Item,Quantity,Price,Deposit,Total'
 
   for (const row of rows as any[]) {
     const total =
@@ -33,6 +35,7 @@ export default defineEventHandler(async (event) => {
 
     csv += `\n${[
       row.order_id,
+      `"${row.event}"`,
       new Date(row.created_at).toISOString(),
       `"${row.cashier}"`,
       row.fachschaft,
