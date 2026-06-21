@@ -136,6 +136,15 @@ export default defineEventHandler(async (event) => {
   const prevHourRevenue = Number(prevHourRows[0]?.revenue ?? 0)
   const prevHourQuantity = Number(prevHourRows[0]?.quantity ?? 0)
 
+  const donationRows = normalizeBigInt(await query(`
+    SELECT COUNT(*) AS count, IFNULL(SUM(amount), 0) AS total
+    FROM donations
+    WHERE event_id = ?
+  `, [eventId]))
+
+  const donationCount = Number(donationRows[0]?.count ?? 0)
+  const donationTotal = Number(donationRows[0]?.total ?? 0)
+
   return {
     ok: true,
     regular: {
@@ -150,6 +159,10 @@ export default defineEventHandler(async (event) => {
     payments: {
       count: paymentCount,
       revenue: paymentRevenue,
+    },
+    donations: {
+      count: donationCount,
+      total: donationTotal,
     },
     lastHour: {
       revenue: lastHourRevenue,

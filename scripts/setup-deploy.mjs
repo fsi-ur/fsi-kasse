@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 const steps = [
   { label: 'events migration', command: 'node', args: ['scripts/migrate-events.mjs'], required: true, attempts: 6 },
   { label: 'app settings migration', command: 'node', args: ['scripts/migrate-app-settings.mjs'], required: true, attempts: 6 },
+  { label: 'donations migration', command: 'node', args: ['scripts/migrate-add-donations.mjs'], required: true, attempts: 6 },
   { label: 'admin seed', command: 'node', args: ['scripts/seed-admin.mjs'], required: true, attempts: 6 },
   { label: 'connection database user', command: 'node', args: ['scripts/create-connection-db-user.mjs'], required: false },
 ]

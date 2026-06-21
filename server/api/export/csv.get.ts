@@ -6,7 +6,7 @@ export default defineEventHandler(async (event) => {
   const current = await requirePermission(event, 'cash_register.manage')
   if (!current.ok) return current
 
-  const rows = await query(`
+  const orderRows = await query(`
     SELECT
       o.id AS order_id,
       e.name AS event,
@@ -25,9 +25,23 @@ export default defineEventHandler(async (event) => {
     ORDER BY o.created_at DESC
   `)
 
+  const donationRows = await query(`
+    SELECT
+      d.id AS donation_id,
+      e.name AS event,
+      d.created_at,
+      c.name AS cashier,
+      d.amount,
+      d.order_id
+    FROM donations d
+    JOIN cashiers c ON d.cashier_id = c.id
+    JOIN events e ON d.event_id = e.id
+    ORDER BY d.created_at DESC
+  `)
+
   let csv = 'Order ID,Event,Date,Cashier,Fachschaft,Item,Quantity,Price,Deposit,Total'
 
-  for (const row of rows as any[]) {
+  for (const row of orderRows as any[]) {
     const total =
       row.fachschaft === 1
         ? 0
@@ -44,6 +58,19 @@ export default defineEventHandler(async (event) => {
       row.price,
       row.deposit,
       total.toFixed(2)
+    ].join(',')}`
+  }
+
+  csv += '\n\nDonation ID,Event,Date,Cashier,Amount,Linked Order ID'
+
+  for (const row of donationRows as any[]) {
+    csv += `\n${[
+      row.donation_id,
+      `"${row.event}"`,
+      new Date(row.created_at).toISOString(),
+      `"${row.cashier}"`,
+      Number(row.amount).toFixed(2),
+      row.order_id ?? ''
     ].join(',')}`
   }
 

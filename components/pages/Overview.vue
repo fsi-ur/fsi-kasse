@@ -65,6 +65,34 @@
         </div>
 
         <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
+          <h2 class="text-lg font-semibold mb-4">{{ t('overview.donations') }}</h2>
+
+          <div class="flex justify-between">
+            <span>{{ t('overview.donationCount') }}</span>
+            <span>{{ data.donations.count }}</span>
+          </div>
+
+          <div class="flex justify-between font-bold text-orange-600">
+            <span>{{ t('overview.donationTotal') }}</span>
+            <span>{{ data.donations.total.toFixed(2) }} €</span>
+          </div>
+        </div>
+
+        <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
+          <h2 class="text-lg font-semibold mb-2">{{ t('overview.totalIncome') }}</h2>
+          <div class="text-3xl font-bold text-orange-600">
+            {{ (data.regular.totalRevenue + data.payments.revenue + data.donations.total).toFixed(2) }} €
+          </div>
+          <div class="mt-1 text-sm text-slate-500">
+            {{ t('overview.totalIncomeBreakdown', {
+              sales: data.regular.totalRevenue.toFixed(2),
+              payments: data.payments.revenue.toFixed(2),
+              donations: data.donations.total.toFixed(2)
+            }) }}
+          </div>
+        </div>
+
+        <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
           <h2 class="text-lg font-semibold mb-4">{{ t('overview.lastHour') }}</h2>
 
           <div class="flex justify-between">

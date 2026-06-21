@@ -72,9 +72,86 @@
           </button>
         </div>
 
+        <!-- Donation section -->
+        <div class="mt-4 border-t border-slate-200 pt-4">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="text-sm font-semibold text-slate-700">{{ t('checkout.donation') }}</span>
+            <div class="ml-auto flex rounded-md border border-slate-200 overflow-hidden text-xs">
+              <button
+                class="px-3 py-1 cursor-pointer transition-colors"
+                :class="donationMode === null
+                  ? 'bg-slate-200 text-slate-700'
+                  : 'bg-white text-slate-400 hover:bg-slate-50'"
+                @click="setDonationMode(null)"
+              >
+                {{ t('checkout.donationNone') }}
+              </button>
+              <button
+                class="px-3 py-1 cursor-pointer transition-colors border-l border-slate-200"
+                :class="donationMode === 'direct'
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-white text-slate-400 hover:bg-slate-50'"
+                @click="setDonationMode('direct')"
+              >
+                {{ t('checkout.donationDirect') }}
+              </button>
+              <button
+                v-if="orderItems.length > 0 && !isFachschaft"
+                class="px-3 py-1 cursor-pointer transition-colors border-l border-slate-200"
+                :class="donationMode === 'paid'
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-white text-slate-400 hover:bg-slate-50'"
+                @click="setDonationMode('paid')"
+              >
+                {{ t('checkout.donationFromPaid') }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="donationMode === 'direct'" class="flex items-center gap-2">
+            <input
+              type="text"
+              inputmode="decimal"
+              class="flex-1 border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              :placeholder="t('checkout.donationAmountPlaceholder')"
+              :value="directDisplayValue"
+              @focus="onDirectFocus"
+              @input="onDirectInput"
+              @blur="onDirectBlur"
+            />
+            <span class="text-sm text-slate-600">€</span>
+          </div>
+
+          <div v-else-if="donationMode === 'paid'" class="space-y-2">
+            <div class="flex items-center gap-2">
+              <input
+                type="text"
+                inputmode="decimal"
+                class="flex-1 border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2"
+                :class="paidAmountWarning
+                  ? 'border-red-400 focus:ring-red-400'
+                  : 'border-slate-300 focus:ring-orange-400'"
+                :placeholder="total.toFixed(2)"
+                :value="paidDisplayValue"
+                @focus="onPaidFocus"
+                @input="onPaidInput"
+                @blur="onPaidBlur"
+              />
+              <span class="text-sm text-slate-600">€</span>
+            </div>
+            <p v-if="paidAmountWarning" class="text-xs text-red-500">
+              {{ t('checkout.paidAmountTooLow', { total: total.toFixed(2) }) }}
+            </p>
+            <div v-else-if="donationFromPaid > 0" class="flex justify-between text-sm font-semibold text-orange-600">
+              <span>{{ t('checkout.donationLabel') }}</span>
+              <span>{{ donationFromPaid.toFixed(2) }} €</span>
+            </div>
+          </div>
+        </div>
+
         <button
           class="btn-primary mt-4 w-full p-3"
-          :disabled="orderItems.length === 0 || !selectedCashier || !selectedEvent"
+          :disabled="!canSubmit || !selectedCashier || !selectedEvent"
           @click="showConfirm = true"
         >
           {{ t('checkout.saveOrder') }}
@@ -90,7 +167,10 @@
   >
     <template #message>
       {{ t('checkout.confirmQuestion') }}<br />
-      <span class="font-bold">{{ t('common.total') }}: {{ total.toFixed(2) }} €</span>
+      <span v-if="orderItems.length > 0" class="font-bold">{{ t('common.total') }}: {{ total.toFixed(2) }} €</span>
+      <span v-if="effectiveDonation > 0" class="block text-orange-600 font-bold">
+        {{ t('checkout.donationLabel') }}: {{ effectiveDonation.toFixed(2) }} €
+      </span>
     </template>
   </FormConfirmation>
 </template>
@@ -98,6 +178,7 @@
 <script setup lang="ts">
 import { useI18n } from '~/composables/useI18n'
 import { useToast } from '~/composables/useToast'
+import { sanitizeCurrencyInput, focusAndSelectInput } from '~/composables/useCurrencyInput'
 
 const items = ref<any[]>([])
 const showConfirm = ref(false)
@@ -110,6 +191,90 @@ const { selectedCashier, selectedEvent, orderItems, isFachschaft } = useCheckout
 const { t } = useI18n()
 const toast = useToast()
 const { onRefresh } = useAppRefresh()
+
+const donationMode = ref<'direct' | 'paid' | null>(null)
+
+// direct donation input state
+const directAmount = ref(0)
+const directRaw = ref('')
+const directFocused = ref(false)
+const directDisplayValue = computed(() =>
+  directFocused.value ? directRaw.value : (directAmount.value > 0 ? directAmount.value.toFixed(2) : '')
+)
+
+function onDirectFocus(e: FocusEvent) {
+  directFocused.value = true
+  directRaw.value = directAmount.value > 0 ? String(directAmount.value) : ''
+  focusAndSelectInput(e)
+}
+function onDirectInput(e: Event) {
+  const raw = sanitizeCurrencyInput((e.target as HTMLInputElement).value)
+  directRaw.value = raw
+  const parsed = parseFloat(raw)
+  directAmount.value = Number.isNaN(parsed) ? 0 : parsed
+  ;(e.target as HTMLInputElement).value = raw
+}
+function onDirectBlur() {
+  directFocused.value = false
+  directAmount.value = Number(directAmount.value.toFixed(2))
+  directRaw.value = ''
+}
+
+// paid-amount input state
+const paidAmount = ref(0)
+const paidRaw = ref('')
+const paidFocused = ref(false)
+const paidDisplayValue = computed(() =>
+  paidFocused.value ? paidRaw.value : (paidAmount.value > 0 ? paidAmount.value.toFixed(2) : '')
+)
+
+function onPaidFocus(e: FocusEvent) {
+  paidFocused.value = true
+  paidRaw.value = paidAmount.value > 0 ? String(paidAmount.value) : ''
+  focusAndSelectInput(e)
+}
+function onPaidInput(e: Event) {
+  const raw = sanitizeCurrencyInput((e.target as HTMLInputElement).value)
+  paidRaw.value = raw
+  const parsed = parseFloat(raw)
+  paidAmount.value = Number.isNaN(parsed) ? 0 : parsed
+  ;(e.target as HTMLInputElement).value = raw
+}
+function onPaidBlur() {
+  paidFocused.value = false
+  paidAmount.value = Number(paidAmount.value.toFixed(2))
+  paidRaw.value = ''
+}
+
+const paidAmountWarning = computed(() =>
+  donationMode.value === 'paid' && paidAmount.value > 0 && paidAmount.value < total.value
+)
+
+const donationFromPaid = computed(() => {
+  if (paidAmount.value <= total.value) return 0
+  return Math.round((paidAmount.value - total.value) * 100) / 100
+})
+
+const effectiveDonation = computed(() => {
+  if (donationMode.value === 'direct') return directAmount.value > 0 ? directAmount.value : 0
+  if (donationMode.value === 'paid') return donationFromPaid.value
+  return 0
+})
+
+const canSubmit = computed(() => {
+  if (orderItems.value.length > 0) return true
+  return effectiveDonation.value > 0
+})
+
+function setDonationMode(mode: 'direct' | 'paid' | null) {
+  donationMode.value = mode
+  directAmount.value = 0
+  directRaw.value = ''
+  directFocused.value = false
+  paidAmount.value = 0
+  paidRaw.value = ''
+  paidFocused.value = false
+}
 
 async function loadItems() {
   const res = await $fetch('/api/items', { method: 'GET' })
@@ -147,22 +312,48 @@ function removeLine(id: number) {
 async function finishOrder() {
   showConfirm.value = false
 
-  const res = await $fetch('/api/orders/create', {
-    method: 'POST',
-    body: {
-      cashier_id: selectedCashier.value,
-      event_id: selectedEvent.value,
-      items: orderItems.value,
-      is_fachschaft: isFachschaft.value
-    }
-  })
+  let orderId: number | null = null
 
-  if (res.ok) {
-    orderItems.value = []
-    isFachschaft.value = false
-    toast.success(t('checkout.saved'))
-  } else {
-    toast.error('error' in res && res.error ? String(res.error) : t('checkout.saveFailed'))
+  if (orderItems.value.length > 0) {
+    const res = await $fetch('/api/orders/create', {
+      method: 'POST',
+      body: {
+        cashier_id: selectedCashier.value,
+        event_id: selectedEvent.value,
+        items: orderItems.value,
+        is_fachschaft: isFachschaft.value
+      }
+    })
+
+    if (!res.ok) {
+      toast.error('error' in res && res.error ? String(res.error) : t('checkout.saveFailed'))
+      return
+    }
+
+    orderId = 'order_id' in res ? Number(res.order_id) : null
   }
+
+  if (effectiveDonation.value > 0) {
+    const donRes = await $fetch('/api/donations/create', {
+      method: 'POST',
+      body: {
+        cashier_id: selectedCashier.value,
+        event_id: selectedEvent.value,
+        amount: effectiveDonation.value,
+        order_id: orderId
+      }
+    })
+
+    if (!donRes.ok) {
+      toast.error('error' in donRes && donRes.error ? String(donRes.error) : t('checkout.donationSaveFailed'))
+      return
+    }
+  }
+
+  orderItems.value = []
+  isFachschaft.value = false
+  setDonationMode(null)
+
+  toast.success(t('checkout.saved'))
 }
 </script>
