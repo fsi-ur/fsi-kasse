@@ -190,6 +190,13 @@ function printUser(prefix, user, level) {
 }
 
 async function chooseExistingAccountingUser(conn, allUsers, localUser) {
+  async function printMatches(matches) {
+    for (const user of matches) {
+      const level = permissionLevelFromSet(await getEffectivePermissions(conn, user.id))
+      printUser('  ', user, level)
+    }
+  }
+
   const exactMatches = allUsers.filter(user => user.username === localUser.username)
   const similarMatches = allUsers.filter(user =>
     user.username !== localUser.username &&
@@ -198,35 +205,48 @@ async function chooseExistingAccountingUser(conn, allUsers, localUser) {
 
   if (exactMatches.length) {
     console.log('Exact username matches:')
-    for (const user of exactMatches) {
-      const level = permissionLevelFromSet(await getEffectivePermissions(conn, user.id))
-      printUser('  ', user, level)
-    }
+    await printMatches(exactMatches)
   }
 
   if (similarMatches.length) {
     console.log('Similar usernames:')
-    for (const user of similarMatches.slice(0, 10)) {
-      const level = permissionLevelFromSet(await getEffectivePermissions(conn, user.id))
-      printUser('  ', user, level)
-    }
+    await printMatches(similarMatches.slice(0, 10))
   }
 
   while (true) {
-    const raw = await ask('Enter existing accounting user id')
-    const userId = Number(raw)
-    if (!userId) {
-      console.log('Please enter a numeric user id.')
+    const raw = (await rl.question('Enter accounting user id, username to search, "list", or "back": ')).trim()
+
+    if (raw.toLowerCase() === 'back') return null
+
+    if (raw.toLowerCase() === 'list') {
+      await printMatches(allUsers)
       continue
     }
 
-    const user = await findAccountingUserById(conn, userId)
-    if (!user) {
-      console.log(`No accounting user found for id ${userId}.`)
+    const numericId = Number(raw)
+    if (numericId) {
+      const user = await findAccountingUserById(conn, numericId)
+      if (!user) {
+        console.log(`No accounting user found with id ${numericId}.`)
+        continue
+      }
+      return user
+    }
+
+    // Treat as username search
+    const matches = allUsers.filter(u => u.username.toLowerCase().includes(raw.toLowerCase()))
+    if (!matches.length) {
+      console.log(`No accounting users found matching "${raw}".`)
       continue
     }
 
-    return user
+    console.log(`Found ${matches.length} match(es):`)
+    await printMatches(matches)
+
+    if (matches.length === 1) {
+      const use = await confirm(`Use #${matches[0].id} ${matches[0].username}?`, true)
+      if (use) return matches[0]
+    }
   }
 }
 
@@ -255,55 +275,57 @@ async function processLocalUser(localConn, accountingConn, localUser, allAccount
   printUser('Local user', localUser, localLevel)
 
   const defaultAction = localLevel === 'none' ? 's' : 'm'
-  const action = await askChoice(
-    'Choose action: match existing user, create new user, skip, or quit',
-    ['m', 'c', 's', 'q'],
-    defaultAction
-  )
 
-  if (action === 'q') return { quit: true }
-  if (action === 's') return { skipped: true }
+  while (true) {
+    const action = await askChoice(
+      'Choose action: match existing user, create new user, skip, or back to menu',
+      ['m', 'c', 's', 'back'],
+      defaultAction
+    )
 
-  let accountingUser
+    if (action === 'back') return { back: true }
+    if (action === 's') return { skipped: true }
 
-  if (action === 'm') {
-    accountingUser = await chooseExistingAccountingUser(accountingConn, allAccountingUsers, localUser)
-  } else {
-    const username = await chooseNewAccountingUsername(accountingConn, localUser)
-    const confirmed = await confirm(`Create accounting user "${username}" using the local password hash`, true)
-    if (!confirmed) return { skipped: true }
+    let accountingUser
 
-    const userId = await createAccountingUser(accountingConn, localUser, username)
-    accountingUser = await findAccountingUserById(accountingConn, userId)
-    allAccountingUsers.push(accountingUser)
-    console.log(`Created accounting user #${accountingUser.id} ${accountingUser.username}`)
-  }
+    if (action === 'm') {
+      accountingUser = await chooseExistingAccountingUser(accountingConn, allAccountingUsers, localUser)
+      if (!accountingUser) continue
+    } else {
+      const username = await chooseNewAccountingUsername(accountingConn, localUser)
+      const confirmed = await confirm(`Create accounting user "${username}" using the local password hash`, true)
+      if (!confirmed) continue
 
-  const existingAccountingPermissions = await getEffectivePermissions(accountingConn, accountingUser.id)
-  const existingAccountingLevel = permissionLevelFromSet(existingAccountingPermissions)
-  console.log(`Accounting user access before migration: ${existingAccountingLevel}`)
+      const userId = await createAccountingUser(accountingConn, localUser, username)
+      accountingUser = await findAccountingUserById(accountingConn, userId)
+      allAccountingUsers.push(accountingUser)
+      console.log(`Created accounting user #${accountingUser.id} ${accountingUser.username}`)
+    }
 
-  const chosenLevel = await askChoice(
-    'Grant cash register access level',
-    ['manage', 'use', 'none'],
-    localLevel
-  )
+    const existingAccountingPermissions = await getEffectivePermissions(accountingConn, accountingUser.id)
+    const existingAccountingLevel = permissionLevelFromSet(existingAccountingPermissions)
+    console.log(`Accounting user access before migration: ${existingAccountingLevel}`)
 
-  if (chosenLevel !== 'none') {
-    await ensurePermissions(accountingConn, accountingUser.id, chosenLevel)
-  }
+    const chosenLevel = await askChoice(
+      'Grant cash register access level',
+      ['manage', 'use', 'none'],
+      localLevel
+    )
 
-  const finalPermissions = await getEffectivePermissions(accountingConn, accountingUser.id)
-  const finalLevel = permissionLevelFromSet(finalPermissions)
+    if (chosenLevel !== 'none') {
+      await ensurePermissions(accountingConn, accountingUser.id, chosenLevel)
+    }
 
-  return {
-    quit: false,
-    skipped: false,
-    localUserId: localUser.id,
-    localUsername: localUser.username,
-    accountingUserId: accountingUser.id,
-    accountingUsername: accountingUser.username,
-    finalLevel,
+    const finalPermissions = await getEffectivePermissions(accountingConn, accountingUser.id)
+    const finalLevel = permissionLevelFromSet(finalPermissions)
+
+    return {
+      localUserId: localUser.id,
+      localUsername: localUser.username,
+      accountingUserId: accountingUser.id,
+      accountingUsername: accountingUser.username,
+      finalLevel,
+    }
   }
 }
 
@@ -367,15 +389,10 @@ async function main() {
     // Interactive menu loop
     while (true) {
       await printOverview(localConn, accountingConn, localUsers, accountingUsers)
-      console.log('Commands: local user id to process  |  "all"  |  "cleanup"  |  "done"  |  "quit"')
+      console.log('Commands: local user id to process  |  "all"  |  "cleanup"  |  "quit"')
       const answer = (await rl.question('> ')).trim().toLowerCase()
 
-      if (answer === 'quit') {
-        console.log('migration: aborted by user')
-        return
-      }
-
-      if (answer === 'done') break
+      if (answer === 'quit') break
 
       if (answer === 'cleanup') {
         const refCounts = await fetchUserReferenceCounts(localConn, localUsers.map(u => u.id))
@@ -428,9 +445,7 @@ async function main() {
 
       for (const localUser of toProcess) {
         const result = await processLocalUser(localConn, accountingConn, localUser, accountingUsers)
-        if (result.quit) {
-          // Treat quit-within-batch as "done with this batch", return to menu
-          console.log('Returning to menu.')
+        if (result.back) {
           break
         }
         if (!result.skipped) results.push(result)
