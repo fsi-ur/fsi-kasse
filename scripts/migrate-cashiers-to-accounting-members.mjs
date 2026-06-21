@@ -157,8 +157,8 @@ function printSimilarMatches(localCashier, accountingMembers) {
   }
 }
 
-async function chooseAccountingMember(localCashier, accountingMembers, reservedAccountingIds) {
-  const defaultValue = localCashier.accounting_member_id ? String(localCashier.accounting_member_id) : 'skip'
+async function chooseAccountingMember(localCashier, accountingMembers, reservedAccountingIds, currentMappedId) {
+  const defaultValue = currentMappedId ? String(currentMappedId) : 'skip'
 
   while (true) {
     printSimilarMatches(localCashier, accountingMembers)
@@ -197,11 +197,41 @@ async function chooseAccountingMember(localCashier, accountingMembers, reservedA
   }
 }
 
-async function applyMappings(localConn, accountingMembers, mappingEntries) {
-  if (!mappingEntries.length) {
-    console.log('migration: no cashier mappings selected')
-    return
+function printOverview(localCashiers, accountingMembers, pendingMappings) {
+  const mappedAccountingIds = new Set(pendingMappings.values())
+  const unmappedAccountingCount = accountingMembers.filter(m => !mappedAccountingIds.has(m.id)).length
+
+  console.log(`\n${'─'.repeat(64)}`)
+  console.log(`Local cashiers: ${localCashiers.length}  |  Accounting members: ${accountingMembers.length}`)
+  console.log(`Mapped: ${pendingMappings.size}  |  Local unmapped: ${localCashiers.length - pendingMappings.size}  |  Accounting without local: ${unmappedAccountingCount}`)
+
+  if (pendingMappings.size > 0) {
+    console.log('\nMapped:')
+    for (const cashier of localCashiers) {
+      const accId = pendingMappings.get(cashier.id)
+      if (accId == null) continue
+      const accMember = accountingMembers.find(m => m.id === accId)
+      const usage = `${cashier.order_count} orders, ${cashier.cashier_payment_count} cashier-pmts, ${cashier.member_payment_count} member-pmts`
+      console.log(`  #${cashier.id} "${cashier.name}" (${usage}) -> accounting #${accId} "${accMember?.name ?? '?'}"`)
+    }
   }
+
+  const unmappedLocal = localCashiers.filter(c => !pendingMappings.has(c.id))
+  if (unmappedLocal.length > 0) {
+    console.log('\nNot yet mapped:')
+    for (const cashier of unmappedLocal) {
+      const usage = `${cashier.order_count} orders, ${cashier.cashier_payment_count} cashier-pmts, ${cashier.member_payment_count} member-pmts`
+      const hasData = cashier.order_count > 0 || cashier.cashier_payment_count > 0 || cashier.member_payment_count > 0
+      const warn = hasData ? ' [!]' : ''
+      console.log(`  #${cashier.id} "${cashier.name}" (${usage})${warn}`)
+    }
+  }
+
+  console.log(`${'─'.repeat(64)}`)
+}
+
+async function applyMappings(localConn, accountingMembers, pendingMappings, addProxyRows) {
+  const mappingEntries = [...pendingMappings.entries()].map(([localCashierId, accountingMemberId]) => ({ localCashierId, accountingMemberId }))
 
   const groups = new Map()
   for (const entry of mappingEntries) {
@@ -212,11 +242,7 @@ async function applyMappings(localConn, accountingMembers, mappingEntries) {
   await localConn.beginTransaction()
 
   try {
-    await localConn.query(`
-      UPDATE cashiers
-      SET accounting_member_id = NULL
-      WHERE accounting_member_id IS NOT NULL
-    `)
+    await localConn.query(`UPDATE cashiers SET accounting_member_id = NULL WHERE accounting_member_id IS NOT NULL`)
 
     for (const [accountingMemberId, localCashierIds] of groups.entries()) {
       const accountingMember = accountingMembers.find(member => member.id === accountingMemberId)
@@ -231,56 +257,48 @@ async function applyMappings(localConn, accountingMembers, mappingEntries) {
         const placeholders = mergedLocalCashierIds.map(() => '?').join(',')
 
         await localConn.query(
-          `UPDATE orders
-           SET cashier_id = ?
-           WHERE cashier_id IN (${placeholders})`,
+          `UPDATE orders SET cashier_id = ? WHERE cashier_id IN (${placeholders})`,
           [canonicalLocalCashierId, ...mergedLocalCashierIds],
         )
 
         await localConn.query(
-          `UPDATE fachschaft_payments
-           SET cashier_id = ?
-           WHERE cashier_id IN (${placeholders})`,
+          `UPDATE fachschaft_payments SET cashier_id = ? WHERE cashier_id IN (${placeholders})`,
           [canonicalLocalCashierId, ...mergedLocalCashierIds],
         )
 
         await localConn.query(
-          `UPDATE fachschaft_payments
-           SET member_id = ?
-           WHERE member_id IN (${placeholders})`,
+          `UPDATE fachschaft_payments SET member_id = ? WHERE member_id IN (${placeholders})`,
           [canonicalLocalCashierId, ...mergedLocalCashierIds],
         )
 
         await localConn.query(
-          `DELETE FROM cashiers
-           WHERE id IN (${placeholders})`,
+          `DELETE FROM cashiers WHERE id IN (${placeholders})`,
           mergedLocalCashierIds,
         )
       }
 
       await localConn.query(
-        `UPDATE cashiers
-         SET accounting_member_id = ?, name = ?, image = NULL, is_active = ?
-         WHERE id = ?`,
+        `UPDATE cashiers SET accounting_member_id = ?, name = ?, image = NULL, is_active = ? WHERE id = ?`,
         [accountingMemberId, accountingMember.name, accountingMember.is_active ? 1 : 0, canonicalLocalCashierId],
       )
     }
 
-    const localRows = await localConn.query(
-      `SELECT accounting_member_id
-       FROM cashiers
-       WHERE accounting_member_id IS NOT NULL`
-    )
-    const existingAccountingIds = new Set(localRows.map(row => Number(row.accounting_member_id)))
+    if (addProxyRows) {
+      const localRows = await localConn.query(`SELECT accounting_member_id FROM cashiers WHERE accounting_member_id IS NOT NULL`)
+      const existingAccountingIds = new Set(localRows.map(row => Number(row.accounting_member_id)))
 
-    for (const accountingMember of accountingMembers) {
-      if (existingAccountingIds.has(accountingMember.id)) continue
+      let proxyCount = 0
+      for (const accountingMember of accountingMembers) {
+        if (existingAccountingIds.has(accountingMember.id)) continue
 
-      await localConn.query(
-        `INSERT INTO cashiers (name, accounting_member_id, image, is_active)
-         VALUES (?, ?, NULL, ?)`,
-        [accountingMember.name, accountingMember.id, accountingMember.is_active ? 1 : 0],
-      )
+        await localConn.query(
+          `INSERT INTO cashiers (name, accounting_member_id, image, is_active) VALUES (?, ?, NULL, ?)`,
+          [accountingMember.name, accountingMember.id, accountingMember.is_active ? 1 : 0],
+        )
+        proxyCount++
+      }
+
+      if (proxyCount) console.log(`migration: inserted ${proxyCount} proxy rows for unmapped accounting members`)
     }
 
     await localConn.commit()
@@ -314,56 +332,145 @@ async function main() {
     }
 
     console.log(`migration: found ${localCashiers.length} local cashiers and ${accountingMembers.length} accounting members`)
-    console.log('Referenced local cashiers should be mapped so orders and payments stay reachable in connected mode.')
+    console.log('Map local cashiers to their accounting member counterparts so orders and payments stay reachable in connected mode.')
 
-    const reservedAccountingIds = new Map()
-    const mappingEntries = []
+    // Pre-populate from existing DB mappings
+    const pendingMappings = new Map() // localCashierId -> accountingMemberId
+    const reservedAccountingIds = new Map() // accountingMemberId -> localCashierId
 
-    for (const localCashier of localCashiers) {
-      if (localCashier.accounting_member_id) {
-        reservedAccountingIds.set(localCashier.accounting_member_id, localCashier.id)
+    for (const cashier of localCashiers) {
+      if (cashier.accounting_member_id != null) {
+        pendingMappings.set(cashier.id, cashier.accounting_member_id)
+        reservedAccountingIds.set(cashier.accounting_member_id, cashier.id)
       }
     }
 
-    for (const localCashier of localCashiers) {
-      const usage = `${localCashier.order_count} orders, ${localCashier.cashier_payment_count} cashier-payments, ${localCashier.member_payment_count} member-payments`
-      const currentMapping = localCashier.accounting_member_id ? `, mapped to accounting member #${localCashier.accounting_member_id}` : ''
-      console.log(`\nLocal cashier #${localCashier.id} ${localCashier.name} (${usage}${currentMapping})`)
+    // Interactive mapping loop
+    while (true) {
+      printOverview(localCashiers, accountingMembers, pendingMappings)
+      console.log('Commands: local cashier id to edit  |  "all"  |  "unmapped"  |  "cleanup"  |  "apply"  |  "quit"')
+      const answer = (await rl.question('> ')).trim().toLowerCase()
 
-      const accountingMemberId = await chooseAccountingMember(localCashier, accountingMembers, reservedAccountingIds)
-      if (!accountingMemberId) {
-        if (localCashier.order_count > 0 || localCashier.cashier_payment_count > 0 || localCashier.member_payment_count > 0) {
-          console.log('Warning: this referenced cashier stays unavailable in connected mode until it is mapped.')
+      if (answer === 'quit') {
+        console.log('migration: aborted by user')
+        return
+      }
+
+      if (answer === 'apply') break
+
+      if (answer === 'cleanup') {
+        const orphans = localCashiers.filter(c =>
+          c.order_count === 0 && c.cashier_payment_count === 0 && c.member_payment_count === 0
+        )
+        if (!orphans.length) {
+          console.log('No unreferenced cashiers found.')
+          continue
         }
+
+        console.log(`\n${orphans.length} cashiers with no orders or payments:`)
+        for (const c of orphans) {
+          const proxyNote = c.accounting_member_id != null ? ` (proxy for accounting member #${c.accounting_member_id})` : ''
+          console.log(`  #${c.id} "${c.name}"${proxyNote}`)
+        }
+
+        const shouldDelete = await confirm(`Delete these ${orphans.length} cashiers?`, false)
+        if (!shouldDelete) continue
+
+        const ids = orphans.map(c => c.id)
+        await localConn.query(
+          `DELETE FROM cashiers WHERE id IN (${ids.map(() => '?').join(',')})`,
+          ids,
+        )
+
+        for (const c of orphans) {
+          localCashiers.splice(localCashiers.indexOf(c), 1)
+          const accId = pendingMappings.get(c.id)
+          if (accId != null && reservedAccountingIds.get(accId) === c.id) reservedAccountingIds.delete(accId)
+          pendingMappings.delete(c.id)
+        }
+
+        console.log(`Deleted ${orphans.length} unreferenced cashiers.`)
         continue
       }
 
-      reservedAccountingIds.set(accountingMemberId, localCashier.id)
-      mappingEntries.push({
-        localCashierId: localCashier.id,
-        accountingMemberId,
-      })
+      let toProcess
+      if (answer === 'all') {
+        toProcess = localCashiers
+      } else if (answer === 'unmapped') {
+        toProcess = localCashiers.filter(c => !pendingMappings.has(c.id))
+        if (!toProcess.length) {
+          console.log('All local cashiers are already mapped.')
+          continue
+        }
+      } else {
+        const id = Number(answer)
+        if (!id) {
+          console.log('Please enter a valid command or a numeric local cashier id.')
+          continue
+        }
+        const cashier = localCashiers.find(c => c.id === id)
+        if (!cashier) {
+          console.log(`No local cashier found with id ${id}.`)
+          continue
+        }
+        toProcess = [cashier]
+      }
+
+      for (const localCashier of toProcess) {
+        const currentMappedId = pendingMappings.get(localCashier.id) ?? null
+        const usage = `${localCashier.order_count} orders, ${localCashier.cashier_payment_count} cashier-pmts, ${localCashier.member_payment_count} member-pmts`
+        const currentMapping = currentMappedId != null ? `, currently -> accounting #${currentMappedId}` : ''
+        console.log(`\nLocal cashier #${localCashier.id} "${localCashier.name}" (${usage}${currentMapping})`)
+
+        const accountingMemberId = await chooseAccountingMember(localCashier, accountingMembers, reservedAccountingIds, currentMappedId)
+
+        // Release old reservation before applying the new choice
+        if (currentMappedId != null && reservedAccountingIds.get(currentMappedId) === localCashier.id) {
+          reservedAccountingIds.delete(currentMappedId)
+        }
+
+        if (accountingMemberId != null) {
+          pendingMappings.set(localCashier.id, accountingMemberId)
+          reservedAccountingIds.set(accountingMemberId, localCashier.id)
+        } else {
+          pendingMappings.delete(localCashier.id)
+          const hasData = localCashier.order_count > 0 || localCashier.cashier_payment_count > 0 || localCashier.member_payment_count > 0
+          if (hasData) {
+            console.log('Warning: this referenced cashier stays unavailable in connected mode until it is mapped.')
+          }
+        }
+      }
     }
 
-    if (!mappingEntries.length) {
-      console.log('migration: nothing selected, no changes made')
+    if (!pendingMappings.size) {
+      console.log('migration: no mappings selected, no changes made')
       return
     }
 
-    console.log('\nSelected mappings:')
-    for (const entry of mappingEntries) {
-      const localCashier = localCashiers.find(cashier => cashier.id === entry.localCashierId)
-      const accountingMember = accountingMembers.find(member => member.id === entry.accountingMemberId)
-      console.log(`  local #${entry.localCashierId} ${localCashier?.name ?? ''} -> accounting #${entry.accountingMemberId} ${accountingMember?.name ?? ''}`)
+    console.log('\nFinal mappings to apply:')
+    for (const [localCashierId, accMemberId] of pendingMappings.entries()) {
+      const cashier = localCashiers.find(c => c.id === localCashierId)
+      const member = accountingMembers.find(m => m.id === accMemberId)
+      console.log(`  local #${localCashierId} "${cashier?.name}" -> accounting #${accMemberId} "${member?.name}"`)
     }
 
-    const shouldApply = await confirm('Apply these mappings and create proxy rows for the remaining accounting members?', true)
+    const mappedAccountingIds = new Set(pendingMappings.values())
+    const unmappedAccountingMembers = accountingMembers.filter(m => !mappedAccountingIds.has(m.id))
+
+    let addProxyRows = false
+    if (unmappedAccountingMembers.length) {
+      console.log(`\n${unmappedAccountingMembers.length} accounting members have no local counterpart.`)
+      console.log('Proxy rows let kassensystem show and select these members as cashiers without querying accounting at runtime.')
+      addProxyRows = await confirm('Insert proxy rows for unmapped accounting members?', true)
+    }
+
+    const shouldApply = await confirm('\nApply all changes now?', true)
     if (!shouldApply) {
       console.log('migration: aborted by user')
       return
     }
 
-    await applyMappings(localConn, accountingMembers, mappingEntries)
+    await applyMappings(localConn, accountingMembers, pendingMappings, addProxyRows)
     console.log('migration: completed successfully')
   } finally {
     rl.close()

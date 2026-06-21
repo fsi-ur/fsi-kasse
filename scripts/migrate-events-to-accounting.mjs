@@ -151,8 +151,8 @@ function printSimilarMatches(localEvent, accountingEvents) {
   }
 }
 
-async function chooseAccountingEvent(localEvent, accountingEvents, reservedAccountingIds) {
-  const defaultValue = localEvent.accounting_event_id ? String(localEvent.accounting_event_id) : 'skip'
+async function chooseAccountingEvent(localEvent, accountingEvents, reservedAccountingIds, currentMappedId) {
+  const defaultValue = currentMappedId ? String(currentMappedId) : 'skip'
 
   while (true) {
     printSimilarMatches(localEvent, accountingEvents)
@@ -191,11 +191,40 @@ async function chooseAccountingEvent(localEvent, accountingEvents, reservedAccou
   }
 }
 
-async function applyMappings(localConn, accountingEvents, mappingEntries) {
-  if (!mappingEntries.length) {
-    console.log('migration: no event mappings selected')
-    return
+function printOverview(localEvents, accountingEvents, pendingMappings) {
+  const mappedAccountingIds = new Set(pendingMappings.values())
+  const unmappedAccountingCount = accountingEvents.filter(e => !mappedAccountingIds.has(e.id)).length
+
+  console.log(`\n${'─'.repeat(64)}`)
+  console.log(`Local events: ${localEvents.length}  |  Accounting events: ${accountingEvents.length}`)
+  console.log(`Mapped: ${pendingMappings.size}  |  Local unmapped: ${localEvents.length - pendingMappings.size}  |  Accounting without local: ${unmappedAccountingCount}`)
+
+  if (pendingMappings.size > 0) {
+    console.log('\nMapped:')
+    for (const localEvent of localEvents) {
+      const accId = pendingMappings.get(localEvent.id)
+      if (accId == null) continue
+      const accEvent = accountingEvents.find(e => e.id === accId)
+      const usage = `${localEvent.order_count} orders, ${localEvent.payment_count} payments`
+      console.log(`  #${localEvent.id} "${localEvent.name}" (${usage}) -> accounting #${accId} "${accEvent?.name ?? '?'}"`)
+    }
   }
+
+  const unmappedLocal = localEvents.filter(e => !pendingMappings.has(e.id))
+  if (unmappedLocal.length > 0) {
+    console.log('\nNot yet mapped:')
+    for (const localEvent of unmappedLocal) {
+      const usage = `${localEvent.order_count} orders, ${localEvent.payment_count} payments`
+      const warn = (localEvent.order_count > 0 || localEvent.payment_count > 0) ? ' [!]' : ''
+      console.log(`  #${localEvent.id} "${localEvent.name}" (${usage})${warn}`)
+    }
+  }
+
+  console.log(`${'─'.repeat(64)}`)
+}
+
+async function applyMappings(localConn, accountingEvents, pendingMappings, addProxyRows) {
+  const mappingEntries = [...pendingMappings.entries()].map(([localEventId, accountingEventId]) => ({ localEventId, accountingEventId }))
 
   const groups = new Map()
   for (const entry of mappingEntries) {
@@ -206,11 +235,7 @@ async function applyMappings(localConn, accountingEvents, mappingEntries) {
   await localConn.beginTransaction()
 
   try {
-    await localConn.query(`
-      UPDATE events
-      SET accounting_event_id = NULL
-      WHERE accounting_event_id IS NOT NULL
-    `)
+    await localConn.query(`UPDATE events SET accounting_event_id = NULL WHERE accounting_event_id IS NOT NULL`)
 
     for (const [accountingEventId, localEventIds] of groups.entries()) {
       const accountingEvent = accountingEvents.find(event => event.id === accountingEventId)
@@ -225,49 +250,43 @@ async function applyMappings(localConn, accountingEvents, mappingEntries) {
         const placeholders = mergedLocalEventIds.map(() => '?').join(',')
 
         await localConn.query(
-          `UPDATE orders
-           SET event_id = ?
-           WHERE event_id IN (${placeholders})`,
+          `UPDATE orders SET event_id = ? WHERE event_id IN (${placeholders})`,
           [canonicalLocalEventId, ...mergedLocalEventIds],
         )
 
         await localConn.query(
-          `UPDATE fachschaft_payments
-           SET event_id = ?
-           WHERE event_id IN (${placeholders})`,
+          `UPDATE fachschaft_payments SET event_id = ? WHERE event_id IN (${placeholders})`,
           [canonicalLocalEventId, ...mergedLocalEventIds],
         )
 
         await localConn.query(
-          `DELETE FROM events
-           WHERE id IN (${placeholders})`,
+          `DELETE FROM events WHERE id IN (${placeholders})`,
           mergedLocalEventIds,
         )
       }
 
       await localConn.query(
-        `UPDATE events
-         SET accounting_event_id = ?, name = ?, is_active = ?
-         WHERE id = ?`,
+        `UPDATE events SET accounting_event_id = ?, name = ?, is_active = ? WHERE id = ?`,
         [accountingEventId, accountingEvent.name, accountingEvent.is_active ? 1 : 0, canonicalLocalEventId],
       )
     }
 
-    const localRows = await localConn.query(
-      `SELECT accounting_event_id
-       FROM events
-       WHERE accounting_event_id IS NOT NULL`
-    )
-    const existingAccountingIds = new Set(localRows.map(row => Number(row.accounting_event_id)))
+    if (addProxyRows) {
+      const localRows = await localConn.query(`SELECT accounting_event_id FROM events WHERE accounting_event_id IS NOT NULL`)
+      const existingAccountingIds = new Set(localRows.map(row => Number(row.accounting_event_id)))
 
-    for (const accountingEvent of accountingEvents) {
-      if (existingAccountingIds.has(accountingEvent.id)) continue
+      let proxyCount = 0
+      for (const accountingEvent of accountingEvents) {
+        if (existingAccountingIds.has(accountingEvent.id)) continue
 
-      await localConn.query(
-        `INSERT INTO events (name, accounting_event_id, is_active)
-         VALUES (?, ?, ?)`,
-        [accountingEvent.name, accountingEvent.id, accountingEvent.is_active ? 1 : 0],
-      )
+        await localConn.query(
+          `INSERT INTO events (name, accounting_event_id, is_active) VALUES (?, ?, ?)`,
+          [accountingEvent.name, accountingEvent.id, accountingEvent.is_active ? 1 : 0],
+        )
+        proxyCount++
+      }
+
+      if (proxyCount) console.log(`migration: inserted ${proxyCount} proxy rows for unmapped accounting events`)
     }
 
     await localConn.commit()
@@ -301,56 +320,142 @@ async function main() {
     }
 
     console.log(`migration: found ${localEvents.length} local events and ${accountingEvents.length} accounting events`)
-    console.log('Referenced local events should be mapped so historical orders and payments stay reachable in connected mode.')
+    console.log('Map local events to their accounting counterparts so historical orders stay reachable in connected mode.')
 
-    const reservedAccountingIds = new Map()
-    const mappingEntries = []
+    // Pre-populate from existing DB mappings
+    const pendingMappings = new Map() // localEventId -> accountingEventId
+    const reservedAccountingIds = new Map() // accountingEventId -> localEventId
 
     for (const localEvent of localEvents) {
-      if (localEvent.accounting_event_id) {
+      if (localEvent.accounting_event_id != null) {
+        pendingMappings.set(localEvent.id, localEvent.accounting_event_id)
         reservedAccountingIds.set(localEvent.accounting_event_id, localEvent.id)
       }
     }
 
-    for (const localEvent of localEvents) {
-      const usage = `${localEvent.order_count} orders, ${localEvent.payment_count} payments`
-      const currentMapping = localEvent.accounting_event_id ? `, mapped to accounting #${localEvent.accounting_event_id}` : ''
-      console.log(`\nLocal event #${localEvent.id} ${localEvent.name} (${usage}${currentMapping})`)
+    // Interactive mapping loop
+    while (true) {
+      printOverview(localEvents, accountingEvents, pendingMappings)
+      console.log('Commands: local event id to edit  |  "all"  |  "unmapped"  |  "cleanup"  |  "apply"  |  "quit"')
+      const answer = (await rl.question('> ')).trim().toLowerCase()
 
-      const accountingEventId = await chooseAccountingEvent(localEvent, accountingEvents, reservedAccountingIds)
-      if (!accountingEventId) {
-        if (localEvent.order_count > 0 || localEvent.payment_count > 0) {
-          console.log('Warning: this referenced event stays unavailable in connected mode until it is mapped.')
+      if (answer === 'quit') {
+        console.log('migration: aborted by user')
+        return
+      }
+
+      if (answer === 'apply') break
+
+      if (answer === 'cleanup') {
+        const orphans = localEvents.filter(e => e.order_count === 0 && e.payment_count === 0)
+        if (!orphans.length) {
+          console.log('No unreferenced events found.')
+          continue
         }
+
+        console.log(`\n${orphans.length} events with no orders or payments:`)
+        for (const e of orphans) {
+          const proxyNote = e.accounting_event_id != null ? ` (proxy for accounting #${e.accounting_event_id})` : ''
+          console.log(`  #${e.id} "${e.name}"${proxyNote}`)
+        }
+
+        const shouldDelete = await confirm(`Delete these ${orphans.length} events?`, false)
+        if (!shouldDelete) continue
+
+        const ids = orphans.map(e => e.id)
+        await localConn.query(
+          `DELETE FROM events WHERE id IN (${ids.map(() => '?').join(',')})`,
+          ids,
+        )
+
+        for (const e of orphans) {
+          localEvents.splice(localEvents.indexOf(e), 1)
+          const accId = pendingMappings.get(e.id)
+          if (accId != null && reservedAccountingIds.get(accId) === e.id) reservedAccountingIds.delete(accId)
+          pendingMappings.delete(e.id)
+        }
+
+        console.log(`Deleted ${orphans.length} unreferenced events.`)
         continue
       }
 
-      reservedAccountingIds.set(accountingEventId, localEvent.id)
-      mappingEntries.push({
-        localEventId: localEvent.id,
-        accountingEventId,
-      })
+      let toProcess
+      if (answer === 'all') {
+        toProcess = localEvents
+      } else if (answer === 'unmapped') {
+        toProcess = localEvents.filter(e => !pendingMappings.has(e.id))
+        if (!toProcess.length) {
+          console.log('All local events are already mapped.')
+          continue
+        }
+      } else {
+        const id = Number(answer)
+        if (!id) {
+          console.log('Please enter a valid command or a numeric local event id.')
+          continue
+        }
+        const event = localEvents.find(e => e.id === id)
+        if (!event) {
+          console.log(`No local event found with id ${id}.`)
+          continue
+        }
+        toProcess = [event]
+      }
+
+      for (const localEvent of toProcess) {
+        const currentMappedId = pendingMappings.get(localEvent.id) ?? null
+        const usage = `${localEvent.order_count} orders, ${localEvent.payment_count} payments`
+        const currentMapping = currentMappedId != null ? `, currently -> accounting #${currentMappedId}` : ''
+        console.log(`\nLocal event #${localEvent.id} "${localEvent.name}" (${usage}${currentMapping})`)
+
+        const accountingEventId = await chooseAccountingEvent(localEvent, accountingEvents, reservedAccountingIds, currentMappedId)
+
+        // Release old reservation before applying the new choice
+        if (currentMappedId != null && reservedAccountingIds.get(currentMappedId) === localEvent.id) {
+          reservedAccountingIds.delete(currentMappedId)
+        }
+
+        if (accountingEventId != null) {
+          pendingMappings.set(localEvent.id, accountingEventId)
+          reservedAccountingIds.set(accountingEventId, localEvent.id)
+        } else {
+          pendingMappings.delete(localEvent.id)
+          if (localEvent.order_count > 0 || localEvent.payment_count > 0) {
+            console.log('Warning: this referenced event stays unavailable in connected mode until it is mapped.')
+          }
+        }
+      }
     }
 
-    if (!mappingEntries.length) {
-      console.log('migration: nothing selected, no changes made')
+    if (!pendingMappings.size) {
+      console.log('migration: no mappings selected, no changes made')
       return
     }
 
-    console.log('\nSelected mappings:')
-    for (const entry of mappingEntries) {
-      const localEvent = localEvents.find(event => event.id === entry.localEventId)
-      const accountingEvent = accountingEvents.find(event => event.id === entry.accountingEventId)
-      console.log(`  local #${entry.localEventId} ${localEvent?.name ?? ''} -> accounting #${entry.accountingEventId} ${accountingEvent?.name ?? ''}`)
+    console.log('\nFinal mappings to apply:')
+    for (const [localEventId, accEventId] of pendingMappings.entries()) {
+      const localEvent = localEvents.find(e => e.id === localEventId)
+      const accEvent = accountingEvents.find(e => e.id === accEventId)
+      console.log(`  local #${localEventId} "${localEvent?.name}" -> accounting #${accEventId} "${accEvent?.name}"`)
     }
 
-    const shouldApply = await confirm('Apply these mappings and create proxy rows for the remaining accounting events?', true)
+    const mappedAccountingIds = new Set(pendingMappings.values())
+    const unmappedAccountingEvents = accountingEvents.filter(e => !mappedAccountingIds.has(e.id))
+
+    let addProxyRows = false
+    if (unmappedAccountingEvents.length) {
+      console.log(`\n${unmappedAccountingEvents.length} accounting events have no local counterpart.`)
+      console.log('Proxy rows let kassensystem show and select these events without querying accounting at runtime.')
+      addProxyRows = await confirm('Insert proxy rows for unmapped accounting events?', true)
+    }
+
+    const shouldApply = await confirm('\nApply all changes now?', true)
     if (!shouldApply) {
       console.log('migration: aborted by user')
       return
     }
 
-    await applyMappings(localConn, accountingEvents, mappingEntries)
+    await applyMappings(localConn, accountingEvents, pendingMappings, addProxyRows)
     console.log('migration: completed successfully')
   } finally {
     rl.close()

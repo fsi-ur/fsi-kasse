@@ -115,9 +115,7 @@ async function fetchUsers(conn) {
 
 async function getDirectPermissions(conn, userId) {
   const rows = await conn.query(
-    `SELECT permission_key
-     FROM user_permissions
-     WHERE user_id = ?`,
+    `SELECT permission_key FROM user_permissions WHERE user_id = ?`,
     [userId]
   )
 
@@ -131,8 +129,7 @@ async function getEffectivePermissions(conn, userId) {
     `SELECT ur.role_id
      FROM user_roles ur
      JOIN roles r ON r.id = ur.role_id
-     WHERE ur.user_id = ?
-       AND r.is_active = 1`,
+     WHERE ur.user_id = ? AND r.is_active = 1`,
     [userId]
   )
 
@@ -142,9 +139,7 @@ async function getEffectivePermissions(conn, userId) {
 
   if (roleIds.length) {
     const permRows = await conn.query(
-      `SELECT permission_key
-       FROM role_permissions
-       WHERE role_id IN (${roleIds.map(() => '?').join(',')})`,
+      `SELECT permission_key FROM role_permissions WHERE role_id IN (${roleIds.map(() => '?').join(',')})`,
       roleIds
     )
     for (const row of permRows) permissions.add(String(row.permission_key))
@@ -156,10 +151,7 @@ async function getEffectivePermissions(conn, userId) {
 
 async function findAccountingUserById(conn, userId) {
   const rows = await conn.query(
-    `SELECT id, username, password_hash, is_active
-     FROM users
-     WHERE id = ?
-     LIMIT 1`,
+    `SELECT id, username, password_hash, is_active FROM users WHERE id = ? LIMIT 1`,
     [userId]
   )
 
@@ -175,8 +167,7 @@ async function findAccountingUserById(conn, userId) {
 
 async function createAccountingUser(conn, localUser, username) {
   const result = await conn.query(
-    `INSERT INTO users (username, password_hash, is_active)
-     VALUES (?, ?, ?)`,
+    `INSERT INTO users (username, password_hash, is_active) VALUES (?, ?, ?)`,
     [username, localUser.password_hash, localUser.is_active ? 1 : 0]
   )
 
@@ -187,8 +178,7 @@ async function ensurePermissions(conn, userId, level) {
   const permissions = desiredPermissionsForLevel(level)
   for (const permission of permissions) {
     await conn.query(
-      `INSERT IGNORE INTO user_permissions (user_id, permission_key)
-       VALUES (?, ?)`,
+      `INSERT IGNORE INTO user_permissions (user_id, permission_key) VALUES (?, ?)`,
       [userId, permission]
     )
   }
@@ -244,10 +234,7 @@ async function chooseNewAccountingUsername(conn, localUser) {
   while (true) {
     const username = await ask('Enter username for new accounting user', localUser.username)
     const rows = await conn.query(
-      `SELECT id
-       FROM users
-       WHERE username = ?
-       LIMIT 1`,
+      `SELECT id FROM users WHERE username = ? LIMIT 1`,
       [username]
     )
 
@@ -320,6 +307,41 @@ async function processLocalUser(localConn, accountingConn, localUser, allAccount
   }
 }
 
+async function fetchUserReferenceCounts(conn, userIds) {
+  if (!userIds.length) return new Map()
+
+  const placeholders = userIds.map(() => '?').join(',')
+
+  const permRows = await conn.query(
+    `SELECT user_id, COUNT(*) AS cnt FROM user_permissions WHERE user_id IN (${placeholders}) GROUP BY user_id`,
+    userIds,
+  )
+  const roleRows = await conn.query(
+    `SELECT user_id, COUNT(*) AS cnt FROM user_roles WHERE user_id IN (${placeholders}) GROUP BY user_id`,
+    userIds,
+  )
+
+  const counts = new Map(userIds.map(id => [id, { permissions: 0, roles: 0 }]))
+  for (const row of permRows) counts.get(Number(row.user_id)).permissions = Number(row.cnt)
+  for (const row of roleRows) counts.get(Number(row.user_id)).roles = Number(row.cnt)
+
+  return counts
+}
+
+async function printOverview(localConn, accountingConn, localUsers, accountingUsers) {
+  console.log(`\n${'─'.repeat(64)}`)
+  console.log(`Local users: ${localUsers.length}  |  Accounting users: ${accountingUsers.length}`)
+  console.log('\nLocal users:')
+  for (const user of localUsers) {
+    const level = permissionLevelFromSet(await getEffectivePermissions(localConn, user.id))
+    const active = user.is_active ? 'active' : 'inactive'
+    const accMatch = accountingUsers.find(u => u.username === user.username)
+    const accInfo = accMatch ? ` [accounting #${accMatch.id}]` : ' [no exact match in accounting]'
+    console.log(`  #${user.id} ${user.username} (${active}, local access: ${level})${accInfo}`)
+  }
+  console.log(`${'─'.repeat(64)}`)
+}
+
 async function main() {
   let localConn
   let accountingConn
@@ -338,18 +360,81 @@ async function main() {
 
     console.log(`Source database: ${DB_NAME} @ ${DB_HOST}:${DB_PORT} as ${DB_USER}`)
     console.log(`Accounting database: ${ACCOUNTING_DB_NAME} @ ${ACCOUNTING_DB_HOST}:${ACCOUNTING_DB_PORT} as ${ACCOUNTING_DB_USER}`)
-    console.log(`Found ${localUsers.length} local users and ${accountingUsers.length} accounting users.`)
     console.log('Existing accounting users keep their current roles. This script only adds direct cash register permissions when needed.')
-
-    const proceed = await confirm('Start manual migration now', true)
-    if (!proceed) return
 
     const results = []
 
-    for (const localUser of localUsers) {
-      const result = await processLocalUser(localConn, accountingConn, localUser, accountingUsers)
-      if (result.quit) break
-      if (!result.skipped) results.push(result)
+    // Interactive menu loop
+    while (true) {
+      await printOverview(localConn, accountingConn, localUsers, accountingUsers)
+      console.log('Commands: local user id to process  |  "all"  |  "cleanup"  |  "done"  |  "quit"')
+      const answer = (await rl.question('> ')).trim().toLowerCase()
+
+      if (answer === 'quit') {
+        console.log('migration: aborted by user')
+        return
+      }
+
+      if (answer === 'done') break
+
+      if (answer === 'cleanup') {
+        const refCounts = await fetchUserReferenceCounts(localConn, localUsers.map(u => u.id))
+        const orphans = localUsers.filter(u => {
+          const counts = refCounts.get(u.id)
+          return counts && counts.permissions === 0 && counts.roles === 0
+        })
+
+        if (!orphans.length) {
+          console.log('No unreferenced users found (all have permissions or roles assigned).')
+          continue
+        }
+
+        console.log(`\n${orphans.length} users with no permissions or roles:`)
+        for (const u of orphans) {
+          const active = u.is_active ? 'active' : 'inactive'
+          console.log(`  #${u.id} ${u.username} (${active})`)
+        }
+
+        const shouldDelete = await confirm(`Delete these ${orphans.length} users?`, false)
+        if (!shouldDelete) continue
+
+        const ids = orphans.map(u => u.id)
+        await localConn.query(
+          `DELETE FROM users WHERE id IN (${ids.map(() => '?').join(',')})`,
+          ids,
+        )
+
+        for (const u of orphans) localUsers.splice(localUsers.indexOf(u), 1)
+        console.log(`Deleted ${orphans.length} unreferenced users.`)
+        continue
+      }
+
+      let toProcess
+      if (answer === 'all') {
+        toProcess = localUsers
+      } else {
+        const id = Number(answer)
+        if (!id) {
+          console.log('Please enter a valid command or a numeric local user id.')
+          continue
+        }
+        const user = localUsers.find(u => u.id === id)
+        if (!user) {
+          console.log(`No local user found with id ${id}.`)
+          continue
+        }
+        toProcess = [user]
+      }
+
+      for (const localUser of toProcess) {
+        const result = await processLocalUser(localConn, accountingConn, localUser, accountingUsers)
+        if (result.quit) {
+          // Treat quit-within-batch as "done with this batch", return to menu
+          console.log('Returning to menu.')
+          break
+        }
+        if (!result.skipped) results.push(result)
+      }
     }
 
     console.log('\nMigration summary')
