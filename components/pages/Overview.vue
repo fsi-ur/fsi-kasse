@@ -133,6 +133,7 @@
 
 <script setup lang="ts">
 import { useI18n } from '~/composables/useI18n'
+import { useAppRefresh } from '~/composables/useAppRefresh'
 
 const { selectedEvent } = useCheckout()
 const { t } = useI18n()
@@ -156,15 +157,19 @@ function barHeight(revenue: number) {
   return Math.max(Number(revenue) > 0 ? 4 : 2, scaled)
 }
 
+function toBerlinIso(hour: string) {
+  return new Date(hour.replace(' ', 'T') + 'Z').toLocaleString('sv-SE', { timeZone: 'Europe/Berlin' })
+}
+
 function hourLabel(hour: string) {
-  return hour.slice(11, 16)
+  return toBerlinIso(hour).slice(11, 16)
 }
 
 function dayLabel(hour: string) {
   const index = hourly.value.findIndex((entry: any) => entry.hour === hour)
-  const date = hour.slice(0, 10)
-  if (index > 0 && hourly.value[index - 1].hour.slice(0, 10) === date) return ''
-  return `${date.slice(8, 10)}.${date.slice(5, 7)}.`
+  const berlinDate = toBerlinIso(hour).slice(0, 10)
+  if (index > 0 && toBerlinIso(hourly.value[index - 1].hour).slice(0, 10) === berlinDate) return ''
+  return `${berlinDate.slice(8, 10)}.${berlinDate.slice(5, 7)}.`
 }
 
 async function loadOverview() {

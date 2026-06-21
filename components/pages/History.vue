@@ -83,6 +83,7 @@
 
 <script setup lang="ts">
 import { useI18n } from '~/composables/useI18n'
+import { useAppRefresh } from '~/composables/useAppRefresh'
 
 const { selectedEvent } = useCheckout()
 const { t, locale } = useI18n()
@@ -101,7 +102,10 @@ function toggle(id: number) {
 }
 
 function formatDate(ts: string | Date) {
-  return new Date(ts).toLocaleString(locale.value)
+  const d = typeof ts === 'string' && !/[Z+\-]\d{2}:?\d{2}$/.test(ts) && !ts.endsWith('Z')
+    ? new Date(ts.replace(' ', 'T') + 'Z')
+    : new Date(ts)
+  return d.toLocaleString(locale.value, { timeZone: 'Europe/Berlin' })
 }
 
 function orderTotal(order: any) {

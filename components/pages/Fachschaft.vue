@@ -68,6 +68,7 @@ import { useI18n } from '~/composables/useI18n'
 import { useToast } from '~/composables/useToast'
 import { useCashRegisterSettings } from '~/composables/useCashRegisterSettings'
 import type { SearchSelectOption } from '~/components/Common/SearchSelect.vue'
+import { useAppRefresh } from '~/composables/useAppRefresh'
 
 const members = ref<any[]>([])
 const payments = ref<any[]>([])
@@ -107,7 +108,10 @@ function onMemberSelect(value: unknown) {
 }
 
 function formatDate(ts: string | Date) {
-  return new Date(ts).toLocaleString(locale.value)
+  const d = typeof ts === 'string' && !/[Z+\-]\d{2}:?\d{2}$/.test(ts) && !ts.endsWith('Z')
+    ? new Date(ts.replace(' ', 'T') + 'Z')
+    : new Date(ts)
+  return d.toLocaleString(locale.value, { timeZone: 'Europe/Berlin' })
 }
 
 async function loadMembers() {

@@ -19,6 +19,7 @@ function createPool(options: {
     database: options.database,
     connectionLimit: options.connectionLimit,
     dateStrings: true,
+    timezone: 'UTC',
   })
 }
 
