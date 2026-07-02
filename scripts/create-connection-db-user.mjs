@@ -23,6 +23,7 @@ const SELECT_TABLES = [
   'order_items',
   'fachschaft_payments',
   'app_settings',
+  'donations',
 ]
 
 if (!CONNECTION_DB_USER || !CONNECTION_DB_PASSWORD) {
