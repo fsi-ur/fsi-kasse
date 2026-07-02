@@ -49,7 +49,7 @@
               @click="removeLine(line.id)"
             >
               <Icon
-                name="ph:x"
+                name="material-symbols:close-rounded"
                 class="w-4 h-4 hover:opacity-70 transition"
                 aria-hidden="true"
               />

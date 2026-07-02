@@ -27,12 +27,12 @@ const menuCollapsed = ref(false)
 const desktopMediaQuery = ref<MediaQueryList | null>(null)
 
 const menuItems = [
-  { name: 'Checkout', labelKey: 'pages.checkout', icon: 'ph:shopping-cart-simple', roles: ['user', 'admin'] },
-  { name: 'History', labelKey: 'pages.history', icon: 'ph:clock-counter-clockwise', roles: ['user', 'admin'] },
-  { name: 'Fachschaft', labelKey: 'pages.fachschaft', icon: 'fa7-solid:money-bill-1', roles: ['user', 'admin'] },
-  { name: 'Overview', labelKey: 'pages.overview', icon: 'streamline-flex:subscription-cashflow', roles: ['admin'] },
-  { name: 'Logout', labelKey: 'pages.logout', icon: 'fe:logout', roles: ['user'] },
-  { name: 'Settings', labelKey: 'pages.settings', icon: 'material-symbols:settings-outline', roles: ['admin'] },
+  { name: 'Checkout', labelKey: 'pages.checkout', icon: 'material-symbols:shopping-cart-outline-rounded', roles: ['user', 'admin'] },
+  { name: 'History', labelKey: 'pages.history', icon: 'material-symbols:history-rounded', roles: ['user', 'admin'] },
+  { name: 'Fachschaft', labelKey: 'pages.fachschaft', icon: 'material-symbols:payments-outline-rounded', roles: ['user', 'admin'] },
+  { name: 'Overview', labelKey: 'pages.overview', icon: 'material-symbols:monitoring-rounded', roles: ['admin'] },
+  { name: 'Logout', labelKey: 'pages.logout', icon: 'material-symbols:logout-rounded', roles: ['user'] },
+  { name: 'Settings', labelKey: 'pages.settings', icon: 'material-symbols:settings-rounded', roles: ['admin'] },
 ]
 
 const filteredMenuItems = computed(() => {
