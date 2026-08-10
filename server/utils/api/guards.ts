@@ -8,6 +8,8 @@ type PermissionCheck = PermissionKey | PermissionKey[]
 interface GuardOptions {
   touch?: boolean
   requireAll?: boolean
+  /** Only the credential endpoints set this — everything else stays locked until the password is changed. */
+  allowPasswordChangeRequired?: boolean
 }
 
 export function hasPermission(user: User | null, permissions: PermissionCheck) {
@@ -28,6 +30,9 @@ export async function requirePermission(
 ) {
   const current = await getCurrentUserFromEvent(event, options.touch ?? true)
   if (!current.ok) return { ok: false as const, error: 'Not authenticated' }
+  if (current.user.must_change_password && !options.allowPasswordChangeRequired) {
+    return { ok: false as const, error: 'Password change required' }
+  }
 
   const allowed = options.requireAll
     ? hasAllPermissions(current.user, Array.isArray(permissions) ? permissions : [permissions])

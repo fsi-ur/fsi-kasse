@@ -18,7 +18,7 @@
             @click="addToOrder(item)"
           >
             <div class="text-lg font-bold">{{ item.name }}</div>
-            <div class="text-sm text-slate-600">{{ item.price }} €</div>
+            <div class="text-sm text-slate-600">{{ formatCurrency(item.price) }}</div>
           </div>
         </div>
       </div>
@@ -38,11 +38,11 @@
             <span class="text-left col-span-1">{{ line.quantity }}</span>
             <span class="text-left col-span-2">{{ line.name }}
               <span v-if="line.deposit > 0" class="text-xs text-gray-500">
-                {{ t('checkout.depositSuffix', { amount: line.deposit }) }}
+                {{ t('checkout.depositSuffix', { amount: formatCurrency(line.deposit) }) }}
               </span>
             </span>
             <span class="text-right font-semibold col-span-2">
-              {{ ((line.price * line.quantity) + (line.deposit * line.quantity)).toFixed(2) }} €
+              {{ formatCurrency((line.price * line.quantity) + (line.deposit * line.quantity)) }}
             </span>
             <button
               class="col-span-1 flex justify-end cursor-pointer"
@@ -59,7 +59,7 @@
 
         <div class="flex flex-rows flex-wrap justify-between">
           <div class="mt-4 font-bold text-lg">
-            {{ t('common.total') }}: {{ total.toFixed(2) }} €
+            {{ t('common.total') }}: {{ formatCurrency(total) }}
           </div>
           <button
             @click="isFachschaft = !isFachschaft"
@@ -140,11 +140,11 @@
               <span class="text-sm text-slate-600">€</span>
             </div>
             <p v-if="paidAmountWarning" class="text-xs text-red-500">
-              {{ t('checkout.paidAmountTooLow', { total: total.toFixed(2) }) }}
+              {{ t('checkout.paidAmountTooLow', { total: formatCurrency(total) }) }}
             </p>
             <div v-else-if="donationFromPaid > 0" class="flex justify-between text-sm font-semibold text-orange-600">
               <span>{{ t('checkout.donationLabel') }}</span>
-              <span>{{ donationFromPaid.toFixed(2) }} €</span>
+              <span>{{ formatCurrency(donationFromPaid) }}</span>
             </div>
           </div>
         </div>
@@ -167,9 +167,9 @@
   >
     <template #message>
       {{ t('checkout.confirmQuestion') }}<br />
-      <span v-if="orderItems.length > 0" class="font-bold">{{ t('common.total') }}: {{ total.toFixed(2) }} €</span>
+      <span v-if="orderItems.length > 0" class="font-bold">{{ t('common.total') }}: {{ formatCurrency(total) }}</span>
       <span v-if="effectiveDonation > 0" class="block text-orange-600 font-bold">
-        {{ t('checkout.donationLabel') }}: {{ effectiveDonation.toFixed(2) }} €
+        {{ t('checkout.donationLabel') }}: {{ formatCurrency(effectiveDonation) }}
       </span>
     </template>
   </FormConfirmation>
@@ -178,7 +178,8 @@
 <script setup lang="ts">
 import { useI18n } from '~/composables/useI18n'
 import { useToast } from '~/composables/useToast'
-import { sanitizeCurrencyInput, focusAndSelectInput } from '~/composables/useCurrencyInput'
+import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
+import { sanitizeCurrencyInput, parseCurrencyInput, focusAndSelectInput } from '~/composables/useCurrencyInput'
 
 const items = ref<any[]>([])
 const showConfirm = ref(false)
@@ -189,6 +190,7 @@ const emit = defineEmits<{
 
 const { selectedCashier, selectedEvent, orderItems, isFachschaft } = useCheckout()
 const { t } = useI18n()
+const { formatCurrency } = useLocaleFormatters()
 const toast = useToast()
 const { onRefresh } = useAppRefresh()
 
@@ -210,8 +212,7 @@ function onDirectFocus(e: FocusEvent) {
 function onDirectInput(e: Event) {
   const raw = sanitizeCurrencyInput((e.target as HTMLInputElement).value)
   directRaw.value = raw
-  const parsed = parseFloat(raw)
-  directAmount.value = Number.isNaN(parsed) ? 0 : parsed
+  directAmount.value = parseCurrencyInput(raw)
   ;(e.target as HTMLInputElement).value = raw
 }
 function onDirectBlur() {
@@ -236,8 +237,7 @@ function onPaidFocus(e: FocusEvent) {
 function onPaidInput(e: Event) {
   const raw = sanitizeCurrencyInput((e.target as HTMLInputElement).value)
   paidRaw.value = raw
-  const parsed = parseFloat(raw)
-  paidAmount.value = Number.isNaN(parsed) ? 0 : parsed
+  paidAmount.value = parseCurrencyInput(raw)
   ;(e.target as HTMLInputElement).value = raw
 }
 function onPaidBlur() {
@@ -398,7 +398,7 @@ async function finishOrder() {
   setDonationMode(null)
 
   toast.success(totalMismatch
-    ? t('checkout.savedWithTotal', { total: bookedTotal!.toFixed(2) })
+    ? t('checkout.savedWithTotal', { total: formatCurrency(bookedTotal!) })
     : t('checkout.saved'))
 }
 </script>

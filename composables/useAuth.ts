@@ -1,42 +1,37 @@
+import type { SessionResponse } from '~/server/utils/sessionGuard'
+import type { LoginResponse } from '~/server/api/auth/login.post'
+import type { User } from '~/types/user'
 import type { PermissionKey } from '~/config/permissions'
-
-interface User {
-  id: number
-  username: string
-  role: 'admin' | 'user'
-  permissions: PermissionKey[]
-}
-
-interface SessionResponse {
-  ok: boolean
-  user?: User
-}
-
-interface LoginResponse {
-  ok: boolean
-  error?: string
-}
 
 export const useAuth = () => {
   const user = useState<User | null>('auth_user', () => null)
 
+  function redirectToLogin() {
+    user.value = null
+
+    if (!import.meta.client) return
+
+    const { currentPage, setPage } = usePage()
+    if (currentPage.value !== 'Login') setPage('Login')
+  }
+
   async function fetchSession() {
     try {
       const data = await $fetch<SessionResponse>('/api/auth/session')
-      if (data?.ok) {
-        user.value = data.user!
+      if (data.ok) {
+        user.value = data.user
         return user.value
+      } else {
+        redirectToLogin()
+        return null
       }
-
-      user.value = null
-      return null
     } catch {
-      user.value = null
+      redirectToLogin()
       return null
     }
   }
 
-  async function login(username: string, password: string) {
+  async function login(username: string, password: string): Promise<LoginResponse> {
     const res = await $fetch<LoginResponse>('/api/auth/login', {
       method: 'POST',
       body: { username, password }
@@ -44,7 +39,7 @@ export const useAuth = () => {
 
     if (res.ok) {
       await fetchSession()
-      return { ok: true }
+      return res
     }
 
     return res
@@ -52,14 +47,19 @@ export const useAuth = () => {
 
   async function logout() {
     await $fetch('/api/auth/logout', { method: 'POST' })
-    user.value = null
+    redirectToLogin()
   }
 
-  function hasRole(roles: string[] | string) {
+  function hasPermission(permissions: PermissionKey[] | PermissionKey) {
     if (!user.value) return false
-    if (Array.isArray(roles)) return roles.includes(user.value.role)
-    return user.value.role === roles
+    if (Array.isArray(permissions)) return permissions.some(p => user.value!.permissions.includes(p))
+    return user.value.permissions.includes(permissions)
   }
 
-  return { user, fetchSession, login, logout, hasRole }
+  function hasAllPermissions(permissions: PermissionKey[]) {
+    if (!user.value) return false
+    return permissions.every(p => user.value!.permissions.includes(p))
+  }
+
+  return { user, fetchSession, login, logout, redirectToLogin, hasPermission, hasAllPermissions }
 }

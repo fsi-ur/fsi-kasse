@@ -7,7 +7,7 @@
     ]"
     :style="containerStyle"
   >
-    <div class="rounded-xl bg-slate-200 p-2">
+    <div class="-mx-6 sm:mx-0 sm:rounded-xl bg-slate-200 p-2">
       <div class="space-y-2">
         <div
           v-for="(row, rowIndex) in tabRows"

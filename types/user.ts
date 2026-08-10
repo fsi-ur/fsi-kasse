@@ -7,4 +7,5 @@ export interface User {
   roles: number[]
   permissions: PermissionKey[]
   is_active: boolean
+  must_change_password: boolean
 }

@@ -1,11 +1,24 @@
 import { defineEventHandler, readBody, setCookie } from 'h3'
-import { accountingQuery } from '~/server/utils/db'
+import { accountingQuery, isConnectedAccountingMode } from '~/server/utils/db'
 import { makeToken, createSession, comparePassword } from '~/server/utils/auth'
 import { normalizeBigInt } from '~/server/utils/normalize'
 import { getUserPermissions, getUserRoleIds } from '~/server/utils/permissions'
 import { getOverlayRole } from '~/server/utils/roles'
+import type { User } from '~/types/user'
 
-export default defineEventHandler(async (event) => {
+interface LoginSuccess {
+  ok: true
+  user: User
+}
+
+interface LoginError {
+  ok: false
+  error: string
+}
+
+export type LoginResponse = LoginSuccess | LoginError
+
+export default defineEventHandler(async (event): Promise<LoginResponse> => {
   const body = await readBody(event)
   const { username, password } = body
 
@@ -29,6 +42,14 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'Not authorized' }
   }
 
+  // The till cannot resolve a required password change in connected mode - that
+  // credential belongs to the accounting app - so refuse before opening a
+  // session instead of letting the user into a dead end.
+  const mustChangePassword = user.must_change_password === 1 || user.must_change_password === '1'
+  if (mustChangePassword && isConnectedAccountingMode()) {
+    return { ok: false, error: 'Password change required' }
+  }
+
   const token = makeToken()
   await createSession(Number(user.id), token)
 
@@ -49,7 +70,10 @@ export default defineEventHandler(async (event) => {
       id: Number(user.id),
       username: user.username,
       role: getOverlayRole(permissions),
+      roles,
       permissions,
+      is_active: user.is_active === 1 || user.is_active === '1',
+      must_change_password: mustChangePassword,
     }
   }
 })

@@ -15,42 +15,14 @@
 
     <section class="rounded-xl border border-slate-200 p-4 space-y-3">
       <div>
-        <h3 class="font-semibold">{{ t('settings.cashRegisterTitle') }}</h3>
-        <p class="text-sm text-slate-600">{{ t('settings.cashRegisterText') }}</p>
+        <h3 class="font-semibold">{{ t('settings.passwordTitle') }}</h3>
+        <p class="text-sm text-slate-600">
+          {{ isConnectedMode ? t('settings.credentialsConnectedNotice') : t('settings.passwordText') }}
+        </p>
       </div>
 
-      <div class="field max-w-xs">
-        <label for="fachschaft-amount">{{ t('settings.fachschaftPaymentAmount') }}</label>
-        <input
-          id="fachschaft-amount"
-          v-model="fachschaftAmount"
-          type="number"
-          min="0.01"
-          step="0.01"
-          class="input"
-          :disabled="isSaving"
-        >
-      </div>
-
-      <p class="text-sm text-slate-600">{{ t('settings.fachschaftPaymentNotice') }}</p>
-
-      <button
-        class="btn-primary"
-        :disabled="isSaving"
-        @click="saveSettings"
-      >
-        {{ isSaving ? t('settings.saving') : t('settings.save') }}
-      </button>
-    </section>
-
-    <section class="rounded-xl border border-slate-200 p-4 space-y-3">
-      <div>
-        <h3 class="font-semibold">{{ t('settings.exportTitle') }}</h3>
-        <p class="text-sm text-slate-600">{{ t('settings.exportText') }}</p>
-      </div>
-
-      <button class="btn-secondary" @click="exportCSV">
-        {{ t('settings.exportButton') }}
+      <button class="btn-secondary" :disabled="isConnectedMode" @click="openPasswordModal">
+        {{ t('settings.passwordOpen') }}
       </button>
     </section>
 
@@ -60,11 +32,77 @@
         <p class="text-sm text-slate-600">{{ t('settings.logoutText') }}</p>
       </div>
 
-      <button class="btn-primary" @click="showLogoutConfirm = true">
-        {{ t('actions.logout') }}
-      </button>
+      <div class="flex flex-col gap-3 sm:flex-row">
+        <button class="btn-primary" @click="showLogoutConfirm = true">
+          {{ t('actions.logout') }}
+        </button>
+
+        <button
+          v-if="!isConnectedMode"
+          class="btn-secondary"
+          :disabled="isLoggingOutAll"
+          :class="{ 'opacity-50 cursor-not-allowed': isLoggingOutAll }"
+          @click="showLogoutAllConfirm = true"
+        >
+          {{ isLoggingOutAll ? t('settings.logoutAllLoading') : t('settings.logoutAll') }}
+        </button>
+      </div>
     </section>
   </div>
+
+  <CommonModal v-model="showPasswordModal" :title="t('settings.passwordTitle')" @close="closePasswordModal">
+    <p class="text-sm text-slate-600">{{ t('settings.passwordSessionText') }}</p>
+
+    <form class="grid gap-4" @submit.prevent="changePassword">
+      <div class="field">
+        <label for="current-password">{{ t('settings.currentPassword') }}</label>
+        <input
+          id="current-password"
+          v-model="passwordForm.currentPassword"
+          type="password"
+          class="input"
+          autocomplete="current-password"
+          :disabled="isChangingPassword"
+        >
+      </div>
+
+      <div class="field">
+        <label for="new-password">{{ t('settings.newPassword') }}</label>
+        <input
+          id="new-password"
+          v-model="passwordForm.newPassword"
+          type="password"
+          class="input"
+          autocomplete="new-password"
+          :disabled="isChangingPassword"
+        >
+      </div>
+
+      <div class="field">
+        <label for="confirm-password">{{ t('settings.confirmPassword') }}</label>
+        <input
+          id="confirm-password"
+          v-model="passwordForm.confirmPassword"
+          type="password"
+          class="input"
+          autocomplete="new-password"
+          :disabled="isChangingPassword"
+        >
+      </div>
+
+      <p class="text-xs text-slate-500">{{ t('settings.passwordHelp', { min: MIN_PASSWORD_LENGTH }) }}</p>
+    </form>
+
+    <template #footer>
+      <CommonFormActions
+        :cancel-label="t('actions.cancel')"
+        :submit-label="isChangingPassword ? t('settings.passwordSaving') : t('settings.passwordSave')"
+        :save-disabled="isChangingPassword"
+        @cancel="closePasswordModal"
+        @submit="changePassword"
+      />
+    </template>
+  </CommonModal>
 
   <FormConfirmation
     v-if="showLogoutConfirm"
@@ -76,36 +114,59 @@
       {{ t('logout.question') }}
     </template>
   </FormConfirmation>
+
+  <FormConfirmation
+    v-if="showLogoutAllConfirm"
+    :headline="t('settings.logoutAllConfirmTitle')"
+    @cancel="showLogoutAllConfirm = false"
+    @confirm="confirmLogoutAll"
+  >
+    <template #message>
+      {{ t('settings.logoutAllConfirmText') }}
+    </template>
+  </FormConfirmation>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from '~/composables/useI18n'
 import { useToast } from '~/composables/useToast'
-import { useCashRegisterSettings } from '~/composables/useCashRegisterSettings'
-import type { CashRegisterSettings } from '~/types/settings'
+import { useChangePassword } from '~/composables/useChangePassword'
+import { MIN_PASSWORD_LENGTH } from '~/config/validation'
+import type { LogoutAllResponse } from '~/server/api/auth/logout-all.post'
 
 const { setPage } = usePage()
-const { logout } = useAuth()
+const { logout, redirectToLogin } = useAuth()
 const { t, language, toggleLanguage } = useI18n()
 const toast = useToast()
-const { settings, loadSettings } = useCashRegisterSettings()
+const { isChangingPassword, passwordForm, resetPasswordForm, submitPasswordChange } = useChangePassword()
+
+const runtimeConfig = useRuntimeConfig()
+const isConnectedMode = runtimeConfig.public.accountingMode === 'connected'
 
 const showLogoutConfirm = ref(false)
-const fachschaftAmount = ref('')
-const isSaving = ref(false)
+const showLogoutAllConfirm = ref(false)
+const showPasswordModal = ref(false)
+const isLoggingOutAll = ref(false)
 
-async function reloadSettings() {
-  const previousLoaded = String(settings.value.fachschaft_payment_amount)
-  await loadSettings(true)
-  // Sync the form field only while it still shows the previously loaded value,
-  // so a refresh never discards unsaved user input.
-  if (!fachschaftAmount.value || fachschaftAmount.value === previousLoaded) {
-    fachschaftAmount.value = String(settings.value.fachschaft_payment_amount)
-  }
+function openPasswordModal() {
+  if (isConnectedMode) return
+  resetPasswordForm()
+  showPasswordModal.value = true
 }
 
-onMounted(reloadSettings)
-useAppRefresh().onRefresh(reloadSettings)
+function closePasswordModal() {
+  if (isChangingPassword.value) return
+  showPasswordModal.value = false
+  resetPasswordForm()
+}
+
+async function changePassword() {
+  const changed = await submitPasswordChange()
+  if (!changed) return
+
+  showPasswordModal.value = false
+  toast.success(t('settings.passwordSaved'))
+}
 
 function confirmLogout() {
   showLogoutConfirm.value = false
@@ -113,59 +174,24 @@ function confirmLogout() {
   logout()
 }
 
-async function saveSettings() {
-  if (isSaving.value) return
+async function confirmLogoutAll() {
+  if (isLoggingOutAll.value) return
 
-  const amount = Number(fachschaftAmount.value)
-  if (!Number.isFinite(amount) || amount <= 0) {
-    toast.error(t('settings.invalidAmount'))
-    return
-  }
-
-  isSaving.value = true
+  isLoggingOutAll.value = true
   try {
-    const res = await $fetch<{ ok: boolean, settings?: CashRegisterSettings, error?: string }>('/api/settings/save', {
-      method: 'POST',
-      body: { fachschaft_payment_amount: amount },
-    })
-
+    const res = await $fetch<LogoutAllResponse>('/api/auth/logout-all', { method: 'POST' })
     if (!res.ok) {
-      toast.error(res.error || t('settings.saveFailed'))
+      toast.error(res.error || t('settings.logoutAllFailed'))
       return
     }
 
-    if (res.settings) {
-      settings.value = res.settings
-      fachschaftAmount.value = String(res.settings.fachschaft_payment_amount)
-    }
-    toast.success(t('settings.saved'))
+    showLogoutAllConfirm.value = false
+    setPage('Checkout')
+    redirectToLogin()
   } catch {
-    toast.error(t('settings.saveFailed'))
+    toast.error(t('settings.logoutAllFailed'))
   } finally {
-    isSaving.value = false
-  }
-}
-
-async function exportCSV() {
-  try {
-    const res = await fetch('/api/export/csv')
-
-    if (!res.ok) {
-      toast.error(t('settings.exportFailed'))
-      return
-    }
-
-    const blob = await res.blob()
-    const url = window.URL.createObjectURL(blob)
-
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `kassensystem-export-${new Date().toISOString().slice(0,10)}.csv`
-    a.click()
-
-    window.URL.revokeObjectURL(url)
-  } catch {
-    toast.error(t('settings.exportFailed'))
+    isLoggingOutAll.value = false
   }
 }
 </script>

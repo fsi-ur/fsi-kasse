@@ -21,12 +21,12 @@
             >
               <span class="truncate">{{ i.name }}</span>
               <span class="text-right">{{ i.quantity }} {{ t('overview.pcs') }}</span>
-              <span class="text-right">{{ Number(i.revenue).toFixed(2) }} €</span>
+              <span class="text-right">{{ formatCurrency(Number(i.revenue)) }}</span>
             </li>
           </ul>
 
           <div class="text-right font-bold mt-3">
-            {{ t('common.total') }}: {{ data.regular.totalRevenue.toFixed(2) }} €
+            {{ t('common.total') }}: {{ formatCurrency(data.regular.totalRevenue) }}
           </div>
         </div>
 
@@ -41,12 +41,12 @@
             >
               <span class="truncate">{{ i.name }}</span>
               <span class="text-right">{{ i.quantity }} {{ t('overview.pcs') }}</span>
-              <span class="text-right">{{ Number(i.worth).toFixed(2) }} €</span>
+              <span class="text-right">{{ formatCurrency(Number(i.worth)) }}</span>
             </li>
           </ul>
 
           <div class="text-right font-bold mt-3">
-            {{ t('common.total') }}: {{ data.fachschaft.totalWorth.toFixed(2) }} €
+            {{ t('common.total') }}: {{ formatCurrency(data.fachschaft.totalWorth) }}
           </div>
         </div>
 
@@ -60,14 +60,14 @@
 
           <div class="flex justify-between font-bold">
             <span>{{ t('overview.revenue') }}</span>
-            <span>{{ Number(data.payments.revenue).toFixed(2) }} €</span>
+            <span>{{ formatCurrency(Number(data.payments.revenue)) }}</span>
           </div>
 
           <div v-if="paymentAmounts.length > 1" class="mt-2 text-sm text-slate-500">
             {{ t('overview.mixedPaymentAmounts') }}
           </div>
           <div v-else-if="paymentAmounts.length === 1" class="mt-2 text-sm text-slate-500">
-            {{ t('overview.paymentAmountEach', { amount: (paymentAmounts[0]?.amount ?? 0).toFixed(2) }) }}
+            {{ t('overview.paymentAmountEach', { amount: formatCurrency(paymentAmounts[0]?.amount ?? 0) }) }}
           </div>
         </div>
 
@@ -81,20 +81,20 @@
 
           <div class="flex justify-between font-bold text-orange-600">
             <span>{{ t('overview.donationTotal') }}</span>
-            <span>{{ data.donations.total.toFixed(2) }} €</span>
+            <span>{{ formatCurrency(data.donations.total) }}</span>
           </div>
         </div>
 
         <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
           <h2 class="text-lg font-semibold mb-2">{{ t('overview.totalIncome') }}</h2>
           <div class="text-3xl font-bold text-orange-600">
-            {{ (data.regular.totalRevenue + data.payments.revenue + data.donations.total).toFixed(2) }} €
+            {{ formatCurrency(data.regular.totalRevenue + data.payments.revenue + data.donations.total) }}
           </div>
           <div class="mt-1 text-sm text-slate-500">
             {{ t('overview.totalIncomeBreakdown', {
-              sales: data.regular.totalRevenue.toFixed(2),
-              payments: data.payments.revenue.toFixed(2),
-              donations: data.donations.total.toFixed(2)
+              sales: formatCurrency(data.regular.totalRevenue),
+              payments: formatCurrency(data.payments.revenue),
+              donations: formatCurrency(data.donations.total)
             }) }}
           </div>
         </div>
@@ -105,11 +105,11 @@
           <div class="flex justify-between">
             <span>{{ t('overview.revenue') }}</span>
             <span>
-              {{ data.lastHour.revenue }} €
+              {{ formatCurrency(data.lastHour.revenue) }}
               <span
                 :class="data.lastHour.diffRevenue >= 0 ? 'text-green-600' : 'text-red-600'"
               >
-                ({{ data.lastHour.diffRevenue >= 0 ? '+' : '' }}{{ data.lastHour.diffRevenue }} €)
+                ({{ formatCurrency(data.lastHour.diffRevenue, { signDisplay: 'exceptZero' }) }})
               </span>
             </span>
           </div>
@@ -140,9 +140,9 @@
                 v-for="entry in hourly"
                 :key="entry.hour"
                 class="flex flex-col items-center flex-1 min-w-14"
-                :title="`${entry.revenue} € — ${entry.quantity} ${t('overview.pcs')}`"
+                :title="`${formatCurrency(entry.revenue)} — ${entry.quantity} ${t('overview.pcs')}`"
               >
-                <span class="text-xs text-slate-600 mb-1 whitespace-nowrap">{{ entry.revenue }} €</span>
+                <span class="text-xs text-slate-600 mb-1 whitespace-nowrap">{{ formatCurrency(entry.revenue) }}</span>
                 <div
                   class="w-full rounded-t-md bg-orange-500"
                   :style="{ height: `${barHeight(entry.revenue)}px` }"
@@ -169,9 +169,11 @@
 <script setup lang="ts">
 import { useI18n } from '~/composables/useI18n'
 import { useAppRefresh } from '~/composables/useAppRefresh'
+import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
 
 const { selectedEvent } = useCheckout()
 const { t } = useI18n()
+const { formatCurrency } = useLocaleFormatters()
 const { onRefresh } = useAppRefresh()
 
 const emit = defineEmits<{

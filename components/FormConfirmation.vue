@@ -9,13 +9,12 @@
     </p>
 
     <template #footer>
-      <button class="btn-secondary" @click="$emit('cancel')">
-        {{ t('actions.cancel') }}
-      </button>
-
-      <button class="btn-primary" @click="$emit('confirm')">
-        {{ t('actions.confirm') }}
-      </button>
+      <CommonFormActions
+        :cancel-label="t('actions.cancel')"
+        :submit-label="t('actions.confirm')"
+        @cancel="$emit('cancel')"
+        @submit="$emit('confirm')"
+      />
     </template>
   </CommonModal>
 </template>

@@ -15,27 +15,27 @@
   >
     <ul
       class="flex flex-1 flex-col mt-2 mb-4 sm:mb-2"
-      :class="items.length > 6 ? 'justify-between' : 'justify-start gap-4'"
+      :class="pages.length > 6 ? 'justify-between' : 'justify-start gap-4'"
     >
       <li
-        v-for="item in items"
-        :key="item.name"
-        @click="handleClick(item.name)"
+        v-for="page in mainPages"
+        :key="page.name"
+        @click="handleClick(page.name)"
         class="cursor-pointer flex flex-col items-center rounded-lg p-1 md:p-3"
       >
         <div
           :class="[
             'w-12 h-12 flex items-center justify-center rounded-full transition-colors',
-            item.name === currentPage
+            page.name === currentPage
               ? 'bg-cyan-600 text-white'
               : 'bg-gray-800 text-gray-400'
           ]"
         >
-          <Icon :name="item.icon" size="30" class="shrink-0" aria-hidden="true" />
+          <Icon :name="page.icon" size="30" class="shrink-0" aria-hidden="true" />
         </div>
 
         <span v-if="!collapsed" class="mt-2 text-sm text-gray-300 font-medium text-center">
-          {{ t(item.labelKey) }}
+          {{ t(page.labelKey) }}
         </span>
       </li>
     </ul>
@@ -83,9 +83,10 @@ import { usePage } from '~/composables/usePage'
 import { useI18n } from '~/composables/useI18n'
 import { useAppRefresh } from '~/composables/useAppRefresh'
 import { useAuth } from '~/composables/useAuth'
+import type { AppPage, PageName } from '~/types/page'
 
 const props = defineProps<{
-  items: { name: string; labelKey: string; icon: string }[]
+  pages: Array<{ name: PageName } & AppPage>
   open: boolean
   collapsed?: boolean
 }>()
@@ -97,9 +98,13 @@ const { t } = useI18n()
 const { isRefreshing, refreshCurrentPage } = useAppRefresh()
 const { user } = useAuth()
 
+const mainPages = computed(() => {
+  return props.pages.filter(page => page.main === true)
+})
+
 const collapsed = computed(() => props.collapsed === true)
 
-function handleClick(name: string) {
+function handleClick(name: PageName) {
   setPage(name, name === currentPage.value ? { resetTabKey: Date.now() } : undefined)
   emit('close')
 }

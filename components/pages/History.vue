@@ -7,86 +7,95 @@
     <template #cards>
       <div v-if="loading" class="col-span-12 text-gray-500">{{ t('common.loading') }}</div>
 
-      <div v-else class="col-span-12">
-        <div
-          v-for="order in orders"
-          :key="order.id"
-          class="bg-white p-4 rounded-xl shadow-lg mb-4"
+      <CommonPageTableCard
+        v-else
+        :title="t('history.title')"
+        persist-key="history-orders"
+        :search-value="search"
+        @update:search-value="search = $event"
+      >
+        <CommonAdvancedTable
+          v-model:search="search"
+          persist-key="history-orders"
+          :rows="orders"
+          :columns="columns"
+          :empty-text="t('history.noOrders')"
+          :show-actions="false"
+          @row-open="openOrder"
         >
-          <div
-            class="flex justify-between items-center cursor-pointer"
-            @click="toggle(order.id)"
-          >
-            <div>
-              <div class="font-semibold">
-                {{ t('history.order', { id: order.id }) }} — {{ t('common.total') }}:
-                {{
-                  order.is_fachschaft
-                    ? '0.00'
-                    : orderTotal(order)
-                }}
-                €
-              </div>
-              <div class="text-sm text-gray-500">
-                {{ t('history.cashier', { name: order.cashier }) }} — {{ formatDate(order.created_at) }}
-              </div>
-              <div
-                v-if="order.is_fachschaft"
-                class="text-xs mt-1 inline-block px-2 py-1 bg-green-100 text-green-700 rounded"
-              >
-                {{ t('history.fachschaftBadge') }}
-              </div>
-            </div>
-
-            <Icon
-              :name="opened[order.id] ? 'material-symbols:keyboard-arrow-down-rounded' : 'material-symbols:keyboard-arrow-right'"
-              class="w-6 h-6 shrink-0 text-slate-500"
-              aria-hidden="true"
+          <template #cell-type="{ row }">
+            <CommonStatusBadge
+              v-if="row.is_fachschaft"
+              :label="t('history.fachschaftBadge')"
+              tone="green"
             />
-          </div>
+            <span v-else>{{ t('history.typeSale') }}</span>
+          </template>
 
-          <div v-if="opened[order.id]" class="mt-4 border-t border-slate-200 pt-4">
-            <ul>
-              <li
-                v-for="item in order.items"
-                :key="item.id"
-                class="grid grid-cols-6 py-2 border-b border-slate-200"
-              >
-                <span class="col-span-1">{{ item.quantity }}</span>
-                <span class="col-span-3">{{ item.name }}
-                  <span
-                    v-if="item.deposit > 0"
-                    class="text-xs text-gray-500"
-                  >
-                    {{ t('checkout.depositSuffix', { amount: item.deposit }) }}
-                  </span>
-                </span>
-                <span class="col-span-2 text-right">
-                  {{ ((Number(item.price) + Number(item.deposit)) * item.quantity).toFixed(2) }} €
-                </span>
-              </li>
-            </ul>
+          <!-- Compact cards read as a receipt line, not as a list of table cells. -->
+          <template #mobile-title="{ row }">
+            {{ t('history.order', { id: row.id }) }} — {{ t('common.total') }}:
+            {{ formatCurrency(row.is_fachschaft ? 0 : orderTotal(row)) }}
+          </template>
 
-            <div class="text-right font-bold mt-3">
-              {{ t('common.total') }}: {{ orderTotal(order) }} €
-            </div>
-          </div>
-        </div>
-
-        <div v-if="orders.length === 0" class="text-gray-400 mt-8">
-          {{ t('history.noOrders') }}
-        </div>
-      </div>
+          <template #mobile-meta="{ row }">
+            <span class="truncate">
+              {{ t('history.cashier', { name: row.cashier }) }} — {{ formatDateTime(row.created_at) }}
+            </span>
+            <CommonStatusBadge
+              v-if="row.is_fachschaft"
+              :label="t('history.fachschaftBadge')"
+              tone="green"
+            />
+          </template>
+        </CommonAdvancedTable>
+      </CommonPageTableCard>
     </template>
   </Page>
+
+  <CommonModal v-model="showOrderModal" :title="openedOrder ? t('history.order', { id: openedOrder.id }) : ''">
+    <ul v-if="openedOrder">
+      <li
+        v-for="item in openedOrder.items"
+        :key="item.id"
+        class="grid grid-cols-6 py-2 border-b border-slate-200"
+      >
+        <span class="col-span-1">{{ item.quantity }}</span>
+        <span class="col-span-3">{{ item.name }}
+          <span
+            v-if="item.deposit > 0"
+            class="text-xs text-gray-500"
+          >
+            {{ t('checkout.depositSuffix', { amount: formatCurrency(item.deposit) }) }}
+          </span>
+        </span>
+        <span class="col-span-2 text-right">
+          {{ formatCurrency((Number(item.price) + Number(item.deposit)) * item.quantity) }}
+        </span>
+      </li>
+    </ul>
+
+    <div v-if="openedOrder" class="text-right font-bold mt-3">
+      {{ t('common.total') }}: {{ formatCurrency(orderTotal(openedOrder)) }}
+    </div>
+
+    <template #footer>
+      <button class="btn-secondary" @click="showOrderModal = false">
+        {{ t('actions.close') }}
+      </button>
+    </template>
+  </CommonModal>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from '~/composables/useI18n'
 import { useAppRefresh } from '~/composables/useAppRefresh'
+import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
+import type { AdvancedTableColumn } from '~/composables/useAdvancedTable'
 
 const { selectedEvent } = useCheckout()
-const { t, locale } = useI18n()
+const { t } = useI18n()
+const { formatCurrency, formatDateTime } = useLocaleFormatters()
 const { onRefresh } = useAppRefresh()
 
 const emit = defineEmits<{
@@ -95,23 +104,54 @@ const emit = defineEmits<{
 
 const orders = ref<any[]>([])
 const loading = ref(true)
-const opened = ref<Record<number, boolean>>({})
-
-function toggle(id: number) {
-  opened.value[id] = !opened.value[id]
-}
-
-function formatDate(ts: string | Date) {
-  const d = typeof ts === 'string' && !/[Z+\-]\d{2}:?\d{2}$/.test(ts) && !ts.endsWith('Z')
-    ? new Date(ts.replace(' ', 'T') + 'Z')
-    : new Date(ts)
-  return d.toLocaleString(locale.value, { timeZone: 'Europe/Berlin' })
-}
+const search = ref('')
+const showOrderModal = ref(false)
+const openedOrder = ref<any | null>(null)
 
 function orderTotal(order: any) {
   return order.items
     .reduce((s: number, i: any) => s + (Number(i.price) + Number(i.deposit)) * Number(i.quantity), 0)
-    .toFixed(2)
+}
+
+const columns: AdvancedTableColumn<any>[] = [
+  {
+    key: 'id',
+    label: t('users.id'),
+    filterType: 'number',
+    getValue: order => order.id,
+  },
+  {
+    key: 'cashier',
+    label: t('history.cashierLabel'),
+    globalSearchable: true,
+    getValue: order => order.cashier,
+  },
+  {
+    key: 'created_at',
+    label: t('users.createdAt'),
+    filterType: 'date',
+    getValue: order => order.created_at,
+    format: order => formatDateTime(order.created_at),
+  },
+  {
+    key: 'total',
+    label: t('common.total'),
+    filterType: 'number',
+    getValue: order => order.is_fachschaft ? 0 : orderTotal(order),
+    format: order => formatCurrency(order.is_fachschaft ? 0 : orderTotal(order)),
+  },
+  {
+    key: 'type',
+    label: t('history.type'),
+    filterable: true,
+    globalSearchable: true,
+    getValue: order => order.is_fachschaft ? t('history.fachschaftBadge') : t('history.typeSale'),
+  },
+]
+
+function openOrder(order: any) {
+  openedOrder.value = order
+  showOrderModal.value = true
 }
 
 async function loadHistory() {

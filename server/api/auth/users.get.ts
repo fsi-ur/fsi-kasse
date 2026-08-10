@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
   if (!current.ok) return current
 
   const rows: any[] = await accountingQuery(`
-    SELECT id, username, is_active, NULL AS created_at
+    SELECT id, username, is_active, must_change_password, NULL AS created_at
     FROM users
     ORDER BY id ASC
   `)
@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
       roles,
       permissions,
       is_active: row.is_active === 1 || row.is_active === '1',
+      must_change_password: row.must_change_password === 1 || row.must_change_password === '1',
       created_at: row.created_at,
     })
   }

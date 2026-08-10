@@ -1,13 +1,69 @@
 <template>
-  <div class="col-span-12 p-4 bg-white shadow-lg rounded-xl">
-    <h2 class="text-lg font-semibold mb-2">{{ t('users.createUser') }}</h2>
-    <p
-      v-if="isConnectedMode"
-      class="mb-4 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900"
+  <p
+    v-if="isConnectedMode"
+    class="col-span-12 -mb-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900"
+  >
+    {{ t('users.connectedNotice') }}
+  </p>
+
+  <CommonPageTableCard
+    :title="t('users.allUsers')"
+    persist-key="settings-users"
+    :search-value="search"
+    :can-create="!isConnectedMode"
+    :create-label="`+ ${t('users.createUser')}`"
+    @update:search-value="search = $event"
+    @create="showCreateModal = true"
+  >
+    <CommonAdvancedTable
+      v-model:search="search"
+      persist-key="settings-users"
+      :rows="users"
+      :columns="columns"
+      :empty-text="t('users.none')"
+      :show-actions="!isConnectedMode"
+      :can-open-row="() => false"
     >
-      {{ t('users.connectedNotice') }}
-    </p>
-    <div class="flex flex-col gap-3 max-w-sm">
+      <template #cell-username="{ row }">
+        <span class="inline-flex flex-wrap items-center gap-2">
+          {{ row.username }}
+          <CommonStatusBadge
+            v-if="row.must_change_password"
+            :label="t('users.mustChangePassword')"
+            tone="yellow"
+          />
+        </span>
+      </template>
+
+      <template #cell-is_active="{ row }">
+        <CommonStatusBadge
+          :label="row.is_active ? t('common.active') : t('common.inactive')"
+          :tone="row.is_active ? 'green' : 'gray'"
+        />
+      </template>
+
+      <template #actions="{ row }">
+        <button class="text-blue-600 hover:underline cursor-pointer" @click="openUsernameModal(row)">
+          {{ t('users.changeUsername') }}
+        </button>
+
+        <button class="text-blue-600 hover:underline cursor-pointer" @click="openPasswordModal(row)">
+          {{ t('users.setPassword') }}
+        </button>
+
+        <button
+          v-if="!row.must_change_password"
+          class="text-amber-700 hover:underline cursor-pointer"
+          @click="requirePasswordChange(row)"
+        >
+          {{ t('users.requirePasswordChange') }}
+        </button>
+      </template>
+    </CommonAdvancedTable>
+  </CommonPageTableCard>
+
+  <CommonModal v-model="showCreateModal" :title="t('users.createUser')" @close="resetForm">
+    <div class="flex flex-col gap-3">
       <div class="field">
         <label>{{ t('users.username') }}</label>
         <input
@@ -47,73 +103,148 @@
           </template>
         </MenuDropdown>
       </div>
-      <button
-        @click="registerUser"
-        class="btn-primary"
-        :disabled="isConnectedMode || !newUsername || !newPassword"
-      >
-        {{ t('users.create') }}
-      </button>
-
-      <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
-      <p v-if="message" class="text-sm text-green-600">{{ message }}</p>
     </div>
-  </div>
 
-  <div class="col-span-12 p-4 bg-white shadow-lg rounded-xl">
-    <h2 class="text-lg font-semibold mb-4">{{ t('users.allUsers') }}</h2>
-    <table class="w-full text-sm border-collapse">
-      <thead>
-        <tr class="border-b border-slate-300 text-slate-600">
-          <th class="text-left p-2 font-semibold">{{ t('users.id') }}</th>
-          <th class="text-left p-2 font-semibold">{{ t('users.username') }}</th>
-          <th class="text-left p-2 font-semibold">{{ t('users.role') }}</th>
-          <th class="text-left p-2 font-semibold">{{ t('common.active') }}</th>
-          <th class="text-left p-2 font-semibold">{{ t('users.createdAt') }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="u in users" :key="u.id" class="border-b border-slate-200">
-          <td class="p-2">{{ u.id }}</td>
-          <td class="p-2">{{ u.username }}</td>
-          <td class="p-2">{{ u.role }}</td>
-          <td class="p-2">
-            <span :class="u.is_active ? 'text-green-600' : 'text-red-600'">
-              {{ u.is_active ? t('common.yes') : t('common.no') }}
-            </span>
-          </td>
-          <td class="p-2">{{ u.created_at }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <template #footer>
+      <CommonFormActions
+        :cancel-label="t('actions.cancel')"
+        :submit-label="t('users.create')"
+        :save-disabled="isConnectedMode || !newUsername || !newPassword"
+        @cancel="showCreateModal = false; resetForm()"
+        @submit="registerUser"
+      />
+    </template>
+  </CommonModal>
 
-    <div v-if="users.length === 0" class="text-gray-400 mt-4">
-      {{ t('users.none') }}
+  <CommonModal
+    v-model="showUsernameModal"
+    :title="t('users.changeUsernameTitle', { name: editedUser?.username })"
+    @close="closeUsernameModal"
+  >
+    <div class="field">
+      <label>{{ t('users.newUsername') }}</label>
+      <input v-model="usernameForm" class="input" autocomplete="off" :disabled="isSavingUser">
     </div>
-  </div>
+
+    <template #footer>
+      <CommonFormActions
+        :cancel-label="t('actions.cancel')"
+        :submit-label="t('actions.save')"
+        :save-disabled="isSavingUser || !usernameForm.trim()"
+        @cancel="closeUsernameModal"
+        @submit="changeUsername"
+      />
+    </template>
+  </CommonModal>
+
+  <CommonModal
+    v-model="showPasswordModal"
+    :title="t('users.setPasswordTitle', { name: editedUser?.username })"
+    @close="closePasswordModal"
+  >
+    <p class="text-sm text-slate-600">{{ t('users.setPasswordText') }}</p>
+
+    <div class="grid gap-4">
+      <div class="field">
+        <label>{{ t('settings.newPassword') }}</label>
+        <input v-model="passwordForm.newPassword" type="password" class="input" autocomplete="new-password" :disabled="isSavingUser">
+      </div>
+
+      <div class="field">
+        <label>{{ t('settings.confirmPassword') }}</label>
+        <input v-model="passwordForm.confirmPassword" type="password" class="input" autocomplete="new-password" :disabled="isSavingUser">
+      </div>
+
+      <p class="text-xs text-slate-500">{{ t('settings.passwordHelp', { min: MIN_PASSWORD_LENGTH }) }}</p>
+    </div>
+
+    <template #footer>
+      <CommonFormActions
+        :cancel-label="t('actions.cancel')"
+        :submit-label="t('actions.save')"
+        :save-disabled="isSavingUser || !passwordForm.newPassword || !passwordForm.confirmPassword"
+        @cancel="closePasswordModal"
+        @submit="setPassword"
+      />
+    </template>
+  </CommonModal>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from '~/composables/useI18n'
+import { useToast } from '~/composables/useToast'
+import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
+import { MIN_PASSWORD_LENGTH } from '~/config/validation'
+import type { AdvancedTableColumn } from '~/composables/useAdvancedTable'
 
 const { t } = useI18n()
+const toast = useToast()
+const { formatDateTime } = useLocaleFormatters()
 
 const runtimeConfig = useRuntimeConfig()
 const isConnectedMode = runtimeConfig.public.accountingMode === 'connected'
 
 const users = ref<any[]>([])
+const search = ref('')
+const showCreateModal = ref(false)
 const newUsername = ref('')
 const newPassword = ref('')
 const role = ref('user')
 const roleDropdownOpen = ref<number | null>(null)
+
+const editedUser = ref<any | null>(null)
+const showUsernameModal = ref(false)
+const showPasswordModal = ref(false)
+const isSavingUser = ref(false)
+const usernameForm = ref('')
+const passwordForm = ref({ newPassword: '', confirmPassword: '' })
 
 function selectRole(next: 'user' | 'admin') {
   role.value = next
   roleDropdownOpen.value = null
 }
 
-const error = ref('')
-const message = ref('')
+function resetForm() {
+  newUsername.value = ''
+  newPassword.value = ''
+  role.value = 'user'
+  roleDropdownOpen.value = null
+}
+
+const columns: AdvancedTableColumn<any>[] = [
+  {
+    key: 'id',
+    label: t('users.id'),
+    filterType: 'number',
+    getValue: row => row.id,
+  },
+  {
+    key: 'username',
+    label: t('users.username'),
+    globalSearchable: true,
+    mobile: 'title',
+    getValue: row => row.username,
+  },
+  {
+    key: 'role',
+    label: t('users.role'),
+    getValue: row => row.role === 'admin' ? t('users.roleAdmin') : t('users.roleUser'),
+  },
+  {
+    key: 'is_active',
+    label: t('common.active'),
+    filterable: false,
+    sortable: false,
+    getValue: row => row.is_active ? t('common.active') : t('common.inactive'),
+  },
+  {
+    key: 'created_at',
+    label: t('users.createdAt'),
+    filterType: 'date',
+    getValue: row => row.created_at,
+    format: row => formatDateTime(row.created_at),
+  },
+]
 
 async function loadUsers() {
   const res = await $fetch('/api/auth/users')
@@ -125,9 +256,6 @@ async function loadUsers() {
 async function registerUser() {
   if (isConnectedMode) return
 
-  error.value = ''
-  message.value = ''
-
   const res = await $fetch('/api/auth/register', {
     method: 'POST',
     body: {
@@ -138,16 +266,111 @@ async function registerUser() {
   })
 
   if (!res.ok) {
-    error.value = 'error' in res ? res.error : t('common.unknownError')
+    toast.error('error' in res && res.error ? String(res.error) : t('common.unknownError'))
     return
   }
 
-  message.value = t('users.created')
-  newUsername.value = ''
-  newPassword.value = ''
-  role.value = 'user'
+  toast.success(t('users.created'))
+  showCreateModal.value = false
+  resetForm()
 
   await loadUsers()
+}
+
+function translateUserError(error?: string) {
+  if (error === 'Missing fields') return t('settings.passwordMissingFields')
+  if (error === 'Password too short') return t('settings.passwordTooShort', { min: MIN_PASSWORD_LENGTH })
+  if (error === 'Passwords do not match') return t('settings.passwordMismatch')
+  if (error === 'Username required') return t('users.usernameRequired')
+  if (error === 'Username already exists') return t('users.usernameExists')
+  if (error === 'User not found') return t('users.notFound')
+  if (error === 'User management is disabled in connected mode') return t('settings.credentialsConnectedNotice')
+  return error || t('common.unknownError')
+}
+
+/** Runs one admin credential call, toasting either outcome and reloading the list on success. */
+async function runUserAction(endpoint: string, body: Record<string, unknown>, successMessage: string) {
+  if (isConnectedMode || isSavingUser.value) return false
+
+  isSavingUser.value = true
+  try {
+    const res = await $fetch<{ ok: boolean, error?: string }>(endpoint, { method: 'POST', body })
+    if (!res.ok) {
+      toast.error(translateUserError(res.error))
+      return false
+    }
+
+    toast.success(successMessage)
+    await loadUsers()
+    return true
+  } catch {
+    toast.error(t('common.unknownError'))
+    return false
+  } finally {
+    isSavingUser.value = false
+  }
+}
+
+function openUsernameModal(row: any) {
+  editedUser.value = row
+  usernameForm.value = row.username
+  showUsernameModal.value = true
+}
+
+function closeUsernameModal() {
+  if (isSavingUser.value) return
+  showUsernameModal.value = false
+  editedUser.value = null
+  usernameForm.value = ''
+}
+
+function openPasswordModal(row: any) {
+  editedUser.value = row
+  passwordForm.value = { newPassword: '', confirmPassword: '' }
+  showPasswordModal.value = true
+}
+
+function closePasswordModal() {
+  if (isSavingUser.value) return
+  showPasswordModal.value = false
+  editedUser.value = null
+  passwordForm.value = { newPassword: '', confirmPassword: '' }
+}
+
+async function changeUsername() {
+  const target = editedUser.value
+  if (!target) return
+
+  const done = await runUserAction(
+    '/api/auth/change-username',
+    { user_id: target.id, username: usernameForm.value.trim() },
+    t('users.usernameChanged'),
+  )
+  if (done) closeUsernameModal()
+}
+
+async function setPassword() {
+  const target = editedUser.value
+  if (!target) return
+
+  const done = await runUserAction(
+    '/api/auth/admin-set-password',
+    {
+      user_id: target.id,
+      newPassword: passwordForm.value.newPassword,
+      confirmPassword: passwordForm.value.confirmPassword,
+    },
+    t('users.passwordSet'),
+  )
+  if (done) closePasswordModal()
+}
+
+async function requirePasswordChange(row: any) {
+  await runUserAction(
+    '/api/auth/require-password-change',
+    { user_id: row.id },
+    t('users.passwordChangeRequired'),
+  )
 }
 
 onMounted(() => {

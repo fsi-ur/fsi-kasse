@@ -30,25 +30,22 @@
         </button>
       </div>
 
-      <div class="col-span-12 bg-white p-4 rounded-xl shadow-lg">
-        <h2 class="text-lg font-semibold mb-4">{{ t('fachschaft.paymentHistory') }}</h2>
-        <ul>
-          <li
-            v-for="p in payments"
-            :key="p.id"
-            class="py-2 border-b border-slate-200"
-          >
-            <div class="font-semibold">{{ p.member }}</div>
-            <div class="text-sm text-gray-500">
-              {{ t('history.cashier', { name: p.cashier }) }} — {{ formatDate(p.created_at) }}
-              — {{ t('fachschaft.paymentAmount', { amount: Number(p.amount).toFixed(2) }) }}
-            </div>
-          </li>
-        </ul>
-        <div v-if="payments.length === 0" class="text-gray-400">
-          {{ t('fachschaft.noPayments') }}
-        </div>
-      </div>
+      <CommonPageTableCard
+        :title="t('fachschaft.paymentHistory')"
+        persist-key="fachschaft-payments"
+        :search-value="paymentSearch"
+        @update:search-value="paymentSearch = $event"
+      >
+        <CommonAdvancedTable
+          v-model:search="paymentSearch"
+          persist-key="fachschaft-payments"
+          :rows="payments"
+          :columns="paymentColumns"
+          :empty-text="t('fachschaft.noPayments')"
+          :show-actions="false"
+          :can-open-row="() => false"
+        />
+      </CommonPageTableCard>
     </template>
   </Page>
 
@@ -70,9 +67,12 @@ import { useToast } from '~/composables/useToast'
 import { useCashRegisterSettings } from '~/composables/useCashRegisterSettings'
 import type { SearchSelectOption } from '~/components/Common/SearchSelect.vue'
 import { useAppRefresh } from '~/composables/useAppRefresh'
+import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
+import type { AdvancedTableColumn } from '~/composables/useAdvancedTable'
 
 const members = ref<any[]>([])
 const payments = ref<any[]>([])
+const paymentSearch = ref('')
 const selectedMember = ref<number | string>('')
 const memberQuery = ref('')
 
@@ -83,12 +83,13 @@ const emit = defineEmits<{
 }>()
 
 const { selectedCashier, selectedEvent } = useCheckout()
-const { t, locale } = useI18n()
+const { t } = useI18n()
+const { formatCurrency, formatDateTime } = useLocaleFormatters()
 const toast = useToast()
 const { settings, loadSettings } = useCashRegisterSettings()
 const { onRefresh } = useAppRefresh()
 
-const formattedAmount = computed(() => settings.value.fachschaft_payment_amount.toLocaleString(locale.value))
+const formattedAmount = computed(() => formatCurrency(settings.value.fachschaft_payment_amount))
 
 const memberOptions = computed<SearchSelectOption[]>(() => members.value
   .filter(member => member.is_active === 1 || member.is_active === true)
@@ -108,12 +109,35 @@ function onMemberSelect(value: unknown) {
   memberQuery.value = ''
 }
 
-function formatDate(ts: string | Date) {
-  const d = typeof ts === 'string' && !/[Z+\-]\d{2}:?\d{2}$/.test(ts) && !ts.endsWith('Z')
-    ? new Date(ts.replace(' ', 'T') + 'Z')
-    : new Date(ts)
-  return d.toLocaleString(locale.value, { timeZone: 'Europe/Berlin' })
-}
+const paymentColumns: AdvancedTableColumn<any>[] = [
+  {
+    key: 'member',
+    label: t('fachschaft.memberName'),
+    globalSearchable: true,
+    mobile: 'title',
+    getValue: payment => payment.member,
+  },
+  {
+    key: 'cashier',
+    label: t('history.cashierLabel'),
+    globalSearchable: true,
+    getValue: payment => payment.cashier,
+  },
+  {
+    key: 'created_at',
+    label: t('users.createdAt'),
+    filterType: 'date',
+    getValue: payment => payment.created_at,
+    format: payment => formatDateTime(payment.created_at),
+  },
+  {
+    key: 'amount',
+    label: t('common.total'),
+    filterType: 'number',
+    getValue: payment => Number(payment.amount),
+    format: payment => formatCurrency(Number(payment.amount)),
+  },
+]
 
 async function loadMembers() {
   const res = await $fetch('/api/cashiers', { method: 'GET' })

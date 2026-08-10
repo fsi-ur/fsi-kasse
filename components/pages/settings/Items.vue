@@ -1,117 +1,46 @@
 <template>
-  <div class="col-span-12 p-4 bg-white shadow-lg rounded-xl">
-    <h2 class="text-lg font-semibold mb-4">{{ t('items.newItem') }}</h2>
-    <div class="flex flex-wrap gap-4 items-end">
-      <div class="field w-48">
-        <label>{{ t('items.itemName') }}</label>
-        <input v-model="newItem.name" class="input" />
-      </div>
-      <div class="field w-32">
-        <label>{{ t('common.price') }}</label>
-        <input v-model="newItem.price" type="number" step="0.01" class="input" />
-      </div>
-      <div class="field w-32">
-        <label>{{ t('common.deposit') }}</label>
-        <input v-model="newItem.deposit" type="number" step="0.01" class="input" />
-      </div>
-
-      <button
-        @click="addItem"
-        class="btn-primary"
-        :disabled="!canAddItem"
-      >
-        {{ t('actions.add') }}
-      </button>
-    </div>
-  </div>
-
-  <div class="col-span-12 bg-white p-4 rounded-xl shadow-lg">
-    <h2 class="text-lg font-semibold mb-4">{{ t('items.allItems') }}</h2>
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="border-b border-slate-300 text-slate-600">
-          <th class="text-left pb-2 font-semibold">{{ t('common.name') }}</th>
-          <th class="text-left pb-2 font-semibold">{{ t('common.price') }}</th>
-          <th class="text-left pb-2 font-semibold">{{ t('common.deposit') }}</th>
-          <th class="text-left pb-2 font-semibold">{{ t('common.active') }}</th>
-          <th class="text-left pb-2"></th>
-          <th class="text-left pb-2"></th>
-          <th class="text-left pb-2"></th>
-        </tr>
-      </thead>
-
-      <tbody>
-        <tr
-          v-for="item in items"
-          :key="item.id"
-          class="border-b border-slate-200"
-        >
-          <td class="py-2">{{ item.name }}</td>
-          <td class="py-2">{{ Number(item.price).toFixed(2) }} €</td>
-          <td class="py-2">{{ Number(item.deposit ?? 0).toFixed(2) }} €</td>
-          <td class="p-2">
-            <span :class="item.is_active ? 'text-green-600' : 'text-red-600'">
-              {{ item.is_active ? t('common.yes') : t('common.no') }}
-            </span>
-          </td>
-          <td class="py-2 text-right">
-            <button
-              @click="startEdit(item)"
-              class="btn-secondary px-3 py-1"
-            >
-              {{ t('actions.edit') }}
-            </button>
-          </td>
-          <td class="py-2 text-right">
-            <button
-              @click="activateItem(item.id, item.is_active)"
-              class="btn-secondary px-3 py-1"
-            >
-              {{ item.is_active == 0 ? t('actions.activate') : t('actions.deactivate') }}
-            </button>
-          </td>
-          <td class="py-2 text-right">
-            <button
-              @click="itemToDelete = item"
-              class="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-md text-white text-sm cursor-pointer"
-            >
-              {{ t('actions.remove') }}
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div v-if="items.length === 0" class="text-gray-400 mt-4">
-      {{ t('items.none') }}
-    </div>
-  </div>
-
-  <CommonModal
-    v-model="isEditing"
-    :title="t('items.editItem')"
-    width-class="max-w-lg"
-    @close="cancelEdit"
+  <PagesSettingsEntityManager
+    ref="managerRef"
+    :title="t('items.allItems')"
+    :singular-label="t('items.itemName')"
+    :add-label="t('items.newItem')"
+    :empty-label="t('items.none')"
+    persist-key="settings-items"
+    list-endpoint="/api/items"
+    save-endpoint="/api/items/create"
+    update-endpoint="/api/items/update"
+    activate-endpoint="/api/items/activate"
+    delete-endpoint="/api/items/delete"
+    :delete-confirm-title="t('items.deleteConfirmTitle')"
+    :delete-confirm-question="(item) => t('items.deleteConfirmQuestion', { name: item.name })"
+    response-list-key="items"
+    :extra-columns="columns"
+    :create-item="() => ({ name: '', price: '', deposit: '' })"
+    :map-edit-item="mapEditItem"
+    :on-error="handleError"
   >
-    <div v-if="editItemState" class="space-y-4">
-      <div class="field">
-        <label>{{ t('items.itemName') }}</label>
-        <input v-model="editItemState.name" class="input" />
-      </div>
+    <template #cell-is_active="{ item }">
+      <CommonStatusBadge
+        :label="item.is_active ? t('common.active') : t('common.inactive')"
+        :tone="item.is_active ? 'green' : 'gray'"
+      />
+    </template>
+
+    <template #modal-fields="{ editingItem: entity, isNewItem }">
       <div class="flex gap-4">
         <div class="field flex-1">
           <label>{{ t('common.price') }}</label>
-          <input v-model="editItemState.price" type="number" step="0.01" min="0" class="input" />
+          <input v-model="entity.price" type="number" step="0.01" min="0" class="input" />
         </div>
         <div class="field flex-1">
           <label>{{ t('common.deposit') }}</label>
-          <input v-model="editItemState.deposit" type="number" step="0.01" min="0" class="input" />
+          <input v-model="entity.deposit" type="number" step="0.01" min="0" class="input" />
         </div>
       </div>
 
       <p class="text-sm text-slate-600">{{ t('items.priceChangeNotice') }}</p>
 
-      <div v-if="priceHistory.length > 0" class="rounded-lg border border-slate-200 p-3">
+      <div v-if="!isNewItem && priceHistory.length > 0" class="rounded-lg border border-slate-200 p-3">
         <h4 class="font-semibold text-sm mb-2">{{ t('items.priceHistory') }}</h4>
         <ul
           class="text-xs text-slate-600"
@@ -124,60 +53,31 @@
             class="flex justify-between items-center gap-4 border-b border-slate-100 last:border-b-0"
             :style="{ height: `${PRICE_HISTORY_ROW_REM}rem` }"
           >
-            <span>{{ formatDate(entry.valid_from) }}</span>
+            <span>{{ formatDateTime(entry.valid_from) }}</span>
             <span>{{ entry.name }}</span>
             <span>
-              {{ Number(entry.price).toFixed(2) }} € / {{ Number(entry.deposit).toFixed(2) }} €
+              {{ formatCurrency(Number(entry.price)) }} / {{ formatCurrency(Number(entry.deposit)) }}
               <span v-if="entry.changed_by"> — {{ entry.changed_by }}</span>
             </span>
           </li>
         </ul>
       </div>
-    </div>
-
-    <template #footer>
-      <button class="btn-secondary" :disabled="isSaving" @click="cancelEdit">
-        {{ t('actions.cancel') }}
-      </button>
-      <button class="btn-primary" :disabled="isSaving || !editItemState?.name" @click="saveEdit">
-        {{ t('actions.save') }}
-      </button>
     </template>
-  </CommonModal>
-
-  <FormConfirmation
-    v-if="itemToDelete"
-    :headline="t('items.deleteConfirmTitle')"
-    @confirm="deleteItem"
-    @cancel="itemToDelete = null"
-  >
-    <template #message>
-      {{ t('items.deleteConfirmQuestion', { name: itemToDelete.name }) }}
-    </template>
-  </FormConfirmation>
+  </PagesSettingsEntityManager>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from '~/composables/useI18n'
 import { useToast } from '~/composables/useToast'
+import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
+import type { EntityManagerColumn, SettingsEntityRow } from './EntityManager.vue'
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const toast = useToast()
+const { formatCurrency, formatDateTime } = useLocaleFormatters()
 
-const items = ref<any[]>([])
-const itemToDelete = ref<any | null>(null)
-const newItem = ref({
-  name: '',
-  price: '',
-  deposit: ''
-})
-
-// A price of 0 is legitimate (free item), so this checks the number, not truthiness.
-const canAddItem = computed(() => {
-  const price = Number(newItem.value.price)
-  return Boolean(newItem.value.name.trim()) && newItem.value.price !== '' && Number.isFinite(price) && price >= 0
-})
+const managerRef = ref<{ loadItems: () => Promise<void> } | null>(null)
 
 // Beyond this many entries the price-history list scrolls instead of growing
 // the modal indefinitely for a heavily-edited item. Rows get a fixed height so
@@ -186,65 +86,43 @@ const canAddItem = computed(() => {
 const PRICE_HISTORY_VISIBLE_LIMIT = 6
 const PRICE_HISTORY_ROW_REM = 1.5
 
+const priceHistory = ref<any[]>([])
 const priceHistoryScrolls = computed(() => priceHistory.value.length > PRICE_HISTORY_VISIBLE_LIMIT)
 
-const editItemState = ref<{ id: number, name: string, price: string, deposit: string } | null>(null)
-const priceHistory = ref<any[]>([])
-const isSaving = ref(false)
-const isEditing = computed({
-  get: () => editItemState.value !== null,
-  set: (value: boolean) => { if (!value) cancelEdit() },
-})
+const columns: EntityManagerColumn[] = [
+  {
+    key: 'price',
+    label: t('common.price'),
+    filterType: 'number',
+    getValue: item => (item as any).price,
+    format: item => formatCurrency(Number((item as any).price)),
+  },
+  {
+    key: 'deposit',
+    label: t('common.deposit'),
+    filterType: 'number',
+    getValue: item => (item as any).deposit ?? 0,
+    format: item => formatCurrency(Number((item as any).deposit ?? 0)),
+  },
+  {
+    key: 'is_active',
+    label: t('common.active'),
+    filterable: false,
+    sortable: false,
+    getValue: item => item.is_active ? t('common.active') : t('common.inactive'),
+  },
+]
 
-function formatDate(ts: string | Date) {
-  const d = typeof ts === 'string' && !/[Z+\-]\d{2}:?\d{2}$/.test(ts) && !ts.endsWith('Z')
-    ? new Date(ts.replace(' ', 'T') + 'Z')
-    : new Date(ts)
-  return d.toLocaleString(locale.value, { timeZone: 'Europe/Berlin' })
-}
-
-async function loadItems() {
-  const res = await $fetch('/api/items', { method: 'GET' })
-  if (res.ok) {
-    items.value = 'items' in res ? res.items as any[] : []
-  }
-}
-
-async function addItem() {
-  if (!canAddItem.value) return
-
-  const res = await $fetch('/api/items/create', {
-    method: 'POST',
-    body: {
-      name: newItem.value.name,
-      price: Number(newItem.value.price),
-      deposit: Number(newItem.value.deposit || 0),
-    }
-  })
-
-  if (!res.ok) {
-    toast.error('error' in res && res.error ? String(res.error) : t('items.saveFailed'))
-    return
-  }
-
-  newItem.value = { name: '', price: '', deposit: '' }
-  await loadItems()
-}
-
-function startEdit(item: any) {
-  editItemState.value = {
-    id: Number(item.id),
-    name: String(item.name),
-    price: String(Number(item.price)),
-    deposit: String(Number(item.deposit ?? 0)),
-  }
+function mapEditItem(item: SettingsEntityRow) {
+  const entity = item as unknown as { id: number, name: string, price: number, deposit: number }
   priceHistory.value = []
-  loadPriceHistory(Number(item.id))
-}
-
-function cancelEdit() {
-  editItemState.value = null
-  priceHistory.value = []
+  loadPriceHistory(entity.id)
+  return {
+    id: entity.id,
+    name: entity.name,
+    price: String(Number(entity.price)),
+    deposit: String(Number(entity.deposit ?? 0)),
+  }
 }
 
 async function loadPriceHistory(id: number) {
@@ -256,68 +134,20 @@ async function loadPriceHistory(id: number) {
   }
 }
 
-async function saveEdit() {
-  if (!editItemState.value || isSaving.value) return
-
-  isSaving.value = true
-  try {
-    const res = await $fetch('/api/items/update', {
-      method: 'POST',
-      body: {
-        id: editItemState.value.id,
-        name: editItemState.value.name,
-        price: Number(editItemState.value.price),
-        deposit: Number(editItemState.value.deposit || 0),
-      }
-    })
-
-    if (!res.ok) {
-      toast.error('error' in res && res.error ? String(res.error) : t('items.saveFailed'))
-      return
-    }
-
-    cancelEdit()
-    toast.success(t('items.saved'))
-    await loadItems()
-  } catch {
-    toast.error(t('items.saveFailed'))
-  } finally {
-    isSaving.value = false
-  }
-}
-
-async function deleteItem() {
-  if (!itemToDelete.value) return
-
-  const res = await $fetch('/api/items/delete', {
-    method: 'POST',
-    body: { id: itemToDelete.value.id }
-  })
-
-  itemToDelete.value = null
-
-  if (!res.ok) {
-    toast.error('code' in res && res.code === 'item_in_use'
-      ? t('items.deleteBlockedByOrders')
-      : ('error' in res && res.error ? String(res.error) : t('items.saveFailed')))
+function handleError(context: { phase: string, message?: string }) {
+  if (context.phase === 'delete' && context.message === 'Item is used by existing orders') {
+    toast.error(t('items.deleteBlockedByOrders'))
     return
   }
 
-  await loadItems()
+  toast.error(context.message || t('items.saveFailed'))
 }
 
-async function activateItem(id: number, status: number) {
-  const is_active = status == 0 ? 1 : 0
-  await $fetch('/api/items/activate', {
-    method: 'POST',
-    body: { id, is_active }
+onMounted(() => {
+  useAppRefresh().onRefresh(async () => {
+    await managerRef.value?.loadItems()
   })
-
-  await loadItems()
-}
-
-onMounted(loadItems)
-useAppRefresh().onRefresh(loadItems)
+})
 </script>
 
 <style scoped>

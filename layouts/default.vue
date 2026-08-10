@@ -1,7 +1,7 @@
 <template>
   <div class="flex min-h-screen">
     <MenuMain
-      :items="filteredMenuItems"
+      :pages="filteredMenuItems"
       :open="menuOpen"
       :collapsed="menuCollapsed"
       @close="menuOpen = false"
@@ -18,28 +18,24 @@
 
 <script setup lang="ts">
 import { useAuth } from '~/composables/useAuth'
+import { PAGES } from '~/config/pages'
 
-const { user, fetchSession } = useAuth()
+const { user, fetchSession, hasPermission, hasAllPermissions } = useAuth()
 
 const menuOpen = ref(false)
 const openMenu = ref(false)
 const menuCollapsed = ref(false)
 const desktopMediaQuery = ref<MediaQueryList | null>(null)
 
-const menuItems = [
-  { name: 'Checkout', labelKey: 'pages.checkout', icon: 'material-symbols:shopping-cart-outline-rounded', roles: ['user', 'admin'] },
-  { name: 'History', labelKey: 'pages.history', icon: 'material-symbols:history-rounded', roles: ['user', 'admin'] },
-  { name: 'Fachschaft', labelKey: 'pages.fachschaft', icon: 'material-symbols:payments-outline-rounded', roles: ['user', 'admin'] },
-  { name: 'Overview', labelKey: 'pages.overview', icon: 'material-symbols:monitoring-rounded', roles: ['admin'] },
-  { name: 'Logout', labelKey: 'pages.logout', icon: 'material-symbols:logout-rounded', roles: ['user'] },
-  { name: 'Settings', labelKey: 'pages.settings', icon: 'material-symbols:settings-rounded', roles: ['admin'] },
-]
+const menuItems = Object.entries(PAGES).map(([name, page]) => ({ name, ...page }))
 
 const filteredMenuItems = computed(() => {
   return menuItems.filter(it => {
-    if (it.roles.includes('guest')) return !user.value
+    if (it.name === 'Login') return false
+    if (it.allowGuest) return !user.value
     if (!user.value) return false
-    return it.roles.includes(user.value.role)
+    if (!it.permissions.length) return true
+    return it.requireAllPermissions ? hasAllPermissions(it.permissions) : hasPermission(it.permissions)
   })
 })
 

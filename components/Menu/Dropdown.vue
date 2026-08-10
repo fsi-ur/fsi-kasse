@@ -1,6 +1,6 @@
 <template>
-  <div ref="wrapper" class="relative w-full">
-    <div @click="toggleDropdown" class="w-full">
+  <div ref="wrapper" :class="wrapperClass">
+    <div @click="toggleDropdown" class="w-full h-full">
       <slot
         name="trigger"
         :open="open"
@@ -14,12 +14,12 @@
         <div
           v-if="open"
           ref="menuRef"
-          class="absolute z-100 rounded-md border bg-white shadow-lg max-h-50 overflow-y-auto"
+          class="absolute z-100 rounded-lg border border-slate-200 bg-white p-1 shadow-xl ring-1 ring-slate-900/5 max-h-50 overflow-y-auto"
           :style="dropdownStyle"
           @mousedown.stop
           @click.stop
         >
-          <slot styling="flex w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded-md cursor-pointer whitespace-nowrap" />
+          <slot styling="flex w-full items-center gap-2 text-left px-3 py-2 text-sm transition hover:bg-slate-100 rounded-md cursor-pointer whitespace-nowrap" />
         </div>
       </transition>
     </teleport>
@@ -27,14 +27,17 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
-  modelValue: number | null
-  id: number
+const props = withDefaults(defineProps<{
+  modelValue: number | string | null
+  id: number | string
   disabled?: boolean
-}>()
+  wrapperClass?: string
+}>(), {
+  wrapperClass: 'relative w-full',
+})
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', v: number | null): void
+  (e: 'update:modelValue', v: number | string | null): void
 }>()
 
 const wrapper = ref<HTMLElement | null>(null)
@@ -53,8 +56,9 @@ const open = computed({
 })
 
 const disabled = computed(() => Boolean(props.disabled))
+// Built on `.input` so the trigger stays visually identical to regular form fields.
 const triggerStyling = computed(() => [
-  'input w-full flex items-center justify-between text-left',
+  'input w-full flex items-center justify-between gap-2 text-left',
 ].filter(Boolean).join(' '))
 
 function toggleDropdown() {
@@ -95,7 +99,8 @@ function updateDropdownPosition() {
     left: `${left}px`,
     minWidth: `${wrapperRect.width}px`,
     width: 'max-content',
-    maxWidth: '30vw',
+    // Cap the width, but never below what fits on a narrow (mobile) viewport.
+    maxWidth: 'min(30rem, calc(100vw - 2rem))',
     maxHeight: `${menuMaxHeight}px`,
   }
 }
@@ -158,10 +163,11 @@ onBeforeUnmount(() => {
 <style scoped>
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.1s ease;
+  transition: opacity 0.12s ease, transform 0.12s ease;
 }
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+  transform: translateY(-0.25rem) scale(0.98);
 }
 </style>

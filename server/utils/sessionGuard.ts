@@ -74,7 +74,8 @@ export async function getCurrentUserFromEvent(event: any, touch: boolean): Promi
       role: getOverlayRole(permissions),
       roles,
       permissions,
-      is_active: session.is_active === 1 || session.is_active === '1'
+      is_active: session.is_active === 1 || session.is_active === '1',
+      must_change_password: session.must_change_password === 1 || session.must_change_password === '1'
     }
   }
 }

@@ -51,7 +51,7 @@ export async function createSession(userId: number, token: string) {
 export async function getSessionByToken(token: string) {
   const tokenHash = hmacToken(token)
   const rows = await accountingQuery(
-    `SELECT s.*, u.username, u.is_active
+    `SELECT s.*, u.username, u.is_active, u.must_change_password
      FROM sessions s
      JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ?`,

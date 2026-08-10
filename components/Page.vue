@@ -1,11 +1,18 @@
 <template>
   <div
+    id="page-root"
     :class="[
-      'xl:p-6',
-      flushHeaderWithCards ? 'space-y-0' : 'space-y-5',
+      'xl:p-6 flex flex-col',
+      flushHeaderWithCards ? 'gap-0' : 'gap-5',
     ]"
   >
-    <div ref="headerContainerRef" class="flex flex-wrap items-start gap-x-7 gap-y-4">
+    <div
+      ref="headerContainerRef"
+      :class="[
+        'flex flex-wrap items-start gap-x-7 gap-y-4',
+        (!headline1 && !$slots.header) && 'md:hidden',
+      ]"
+    >
       <div ref="headlineGroupRef" class="flex min-w-0 items-center gap-3">
         <button
           class="bg-gray-900 text-white rounded-md md:hidden w-8 h-8 flex items-center justify-center cursor-pointer"
@@ -17,7 +24,7 @@
             aria-hidden="true"
           />
         </button>
-        <h1 class="text-2xl font-bold">{{ headline1 }}</h1>
+        <h1 v-if="headline1" class="text-2xl font-bold">{{ headline1 }}</h1>
       </div>
 
       <slot name="header" v-bind="{ headerContainerRef, headlineGroupRef }"></slot>

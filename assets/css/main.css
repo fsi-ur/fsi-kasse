@@ -9,8 +9,9 @@ html {
 }
 
 @layer components {
+    /* Radius scale: cards rounded-xl > inputs/buttons/floating panels rounded-lg > menu items rounded-md. */
     .input {
-        @apply w-full border rounded-md border-slate-300 border-solid p-2 text-sm bg-white;
+        @apply w-full border rounded-lg border-slate-300 border-solid p-2 text-sm bg-white transition-colors;
     }
 
     .input:disabled {
@@ -30,7 +31,7 @@ html {
     }
 
     .btn-primary {
-        @apply bg-orange-500 rounded-md py-2 px-4 text-white text-sm cursor-pointer;
+        @apply bg-orange-500 rounded-lg py-2 px-4 text-white text-sm cursor-pointer transition-colors;
     }
 
     .btn-primary:hover {
@@ -42,7 +43,7 @@ html {
     }
 
     .btn-secondary {
-        @apply bg-slate-200 rounded-md py-2 px-4 text-black text-sm cursor-pointer;
+        @apply bg-slate-200 rounded-lg py-2 px-4 text-black text-sm cursor-pointer transition-colors;
     }
 
     .btn-secondary:hover {
@@ -51,6 +52,14 @@ html {
 
     .btn-secondary:disabled {
         @apply opacity-50 cursor-not-allowed;
+    }
+
+    .btn-outline {
+        @apply bg-white border border-orange-500 rounded-lg py-2 px-4 text-orange-600 text-sm cursor-pointer transition-colors;
+    }
+
+    .btn-outline:hover {
+        @apply bg-orange-50;
     }
 
     .section-title {
