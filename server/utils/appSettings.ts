@@ -1,4 +1,4 @@
-import { query } from '~/server/utils/db'
+import { query, withTransaction } from '~/server/utils/db'
 import type { CashRegisterSettings } from '~/types/settings'
 
 const SETTING_KEYS = {
@@ -41,19 +41,39 @@ export async function getCashRegisterSettings(conn?: any): Promise<CashRegisterS
   })
 }
 
-export async function saveCashRegisterSettings(settings: Partial<CashRegisterSettings>, conn?: any): Promise<CashRegisterSettings> {
+export async function saveCashRegisterSettings(
+  settings: Partial<CashRegisterSettings>,
+  changedBy?: string | null,
+): Promise<CashRegisterSettings> {
   const normalized = normalizeCashRegisterSettings(settings)
+  const newValue = String(normalized.fachschaft_payment_amount)
 
-  await query(
-    `INSERT INTO app_settings (setting_key, setting_value)
-     VALUES (?, ?)
-     ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
-    [
-      SETTING_KEYS.fachschaft_payment_amount,
-      String(normalized.fachschaft_payment_amount),
-    ],
-    conn,
-  )
+  // History is an audit trail only — every payment already carries its own
+  // amount snapshot, so correctness never depends on this table.
+  await withTransaction(async (conn) => {
+    const existingRows = await query<Array<{ setting_value: string | null }>>(
+      `SELECT setting_value FROM app_settings WHERE setting_key = ?`,
+      [SETTING_KEYS.fachschaft_payment_amount],
+      conn,
+    )
+    const previousValue = existingRows[0]?.setting_value ?? null
+
+    await query(
+      `INSERT INTO app_settings (setting_key, setting_value)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+      [SETTING_KEYS.fachschaft_payment_amount, newValue],
+      conn,
+    )
+
+    if (previousValue !== newValue) {
+      await query(
+        `INSERT INTO app_settings_history (setting_key, setting_value, changed_by) VALUES (?, ?, ?)`,
+        [SETTING_KEYS.fachschaft_payment_amount, newValue, changedBy ?? null],
+        conn,
+      )
+    }
+  })
 
   return normalized
 }

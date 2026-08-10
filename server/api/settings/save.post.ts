@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     return { ok: false as const, error: 'Invalid fachschaft payment amount' }
   }
 
-  const settings = await saveCashRegisterSettings({ fachschaft_payment_amount: amount })
+  const settings = await saveCashRegisterSettings({ fachschaft_payment_amount: amount }, current.user?.username ?? null)
 
   return { ok: true as const, settings }
 })

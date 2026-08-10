@@ -89,9 +89,24 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS order_items (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   order_id BIGINT UNSIGNED NOT NULL,
-  item_id BIGINT UNSIGNED NOT NULL,
+  item_id BIGINT UNSIGNED NULL,
+  item_name VARCHAR(255) NOT NULL,
   quantity INT NOT NULL,
+  unit_price DECIMAL(10,2) NOT NULL,
+  unit_deposit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+  FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS item_price_history (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  item_id BIGINT UNSIGNED NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  price DECIMAL(10,2) NOT NULL,
+  deposit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  changed_by VARCHAR(255) NULL,
+  valid_from TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_item_price_history_item (item_id, valid_from),
   FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
 
@@ -100,11 +115,21 @@ CREATE TABLE IF NOT EXISTS app_settings (
   setting_value TEXT NULL
 );
 
+CREATE TABLE IF NOT EXISTS app_settings_history (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  setting_key VARCHAR(127) NOT NULL,
+  setting_value TEXT NULL,
+  changed_by VARCHAR(255) NULL,
+  valid_from TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_app_settings_history_key (setting_key, valid_from)
+);
+
 CREATE TABLE IF NOT EXISTS fachschaft_payments (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   member_id BIGINT UNSIGNED NOT NULL,
   cashier_id BIGINT UNSIGNED NOT NULL,
   event_id BIGINT UNSIGNED NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (member_id) REFERENCES cashiers(id),
   FOREIGN KEY (cashier_id) REFERENCES cashiers(id),

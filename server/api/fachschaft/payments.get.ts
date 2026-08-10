@@ -16,12 +16,13 @@ export default defineEventHandler(async (event) => {
     SELECT 
       p.id AS payment_id,
       p.created_at,
+      p.amount,
       m.name AS member_name,
       c.name AS cashier_name
     FROM fachschaft_payments p
     JOIN cashiers c ON p.cashier_id = c.id
     JOIN cashiers m ON p.member_id = m.id
-    WHERE event_id = ?
+    WHERE p.event_id = ?
     ORDER BY p.created_at DESC, p.id DESC
   `, [eventId])
 
@@ -35,6 +36,8 @@ export default defineEventHandler(async (event) => {
         id: row.payment_id,
         cashier: row.cashier_name,
         member: row.member_name,
+        // The amount stored on the payment, not the current setting.
+        amount: Number(row.amount),
         created_at: row.created_at,
       }
       payments.push(payment)

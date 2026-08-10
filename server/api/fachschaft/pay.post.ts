@@ -4,6 +4,7 @@ import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
 import { getCashRegisterCashierById } from '~/server/utils/cashiers'
 import { getCashRegisterEventById } from '~/server/utils/events'
+import { getCashRegisterSettings } from '~/server/utils/appSettings'
 
 export default defineEventHandler(async (event) => {
   const current = await requirePermission(event, 'cash_register.use')
@@ -39,12 +40,21 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'Selected event is not active' }
   }
 
+  // The amount is snapshotted from the current setting, never from the request
+  // body, so a later settings change does not revalue this payment.
+  const settings = await getCashRegisterSettings()
+
   const result = await query(
-    `INSERT INTO fachschaft_payments (member_id, cashier_id, event_id) VALUES (?, ?, ?)`,
-    [member_id, cashier_id, event_id]
+    `INSERT INTO fachschaft_payments (member_id, cashier_id, event_id, amount) VALUES (?, ?, ?, ?)`,
+    [member_id, cashier_id, event_id, settings.fachschaft_payment_amount.toFixed(2)]
   )
 
   const payment_id = normalizeBigInt((result as any).insertId)
 
-  return { ok: true, order_id: normalizeBigInt(payment_id) }
+  return {
+    ok: true,
+    payment_id: normalizeBigInt(payment_id),
+    order_id: normalizeBigInt(payment_id),
+    amount: settings.fachschaft_payment_amount,
+  }
 })

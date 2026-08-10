@@ -32,6 +32,8 @@
         >
       </div>
 
+      <p class="text-sm text-slate-600">{{ t('settings.fachschaftPaymentNotice') }}</p>
+
       <button
         class="btn-primary"
         :disabled="isSaving"

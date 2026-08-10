@@ -62,7 +62,7 @@
                   </span>
                 </span>
                 <span class="col-span-2 text-right">
-                  {{ ((item.price * item.quantity) + (item.deposit * item.quantity)).toFixed(2) }} €
+                  {{ ((Number(item.price) + Number(item.deposit)) * item.quantity).toFixed(2) }} €
                 </span>
               </li>
             </ul>
@@ -110,7 +110,7 @@ function formatDate(ts: string | Date) {
 
 function orderTotal(order: any) {
   return order.items
-    .reduce((s: any, i: any) => s + (i.price * i.quantity) + (i.deposit * i.quantity), 0)
+    .reduce((s: number, i: any) => s + (Number(i.price) + Number(i.deposit)) * Number(i.quantity), 0)
     .toFixed(2)
 }
 

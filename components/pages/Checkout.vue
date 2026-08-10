@@ -281,7 +281,39 @@ async function loadItems() {
   if (res.ok) {
     const allItems = 'items' in res ? res.items as any[] : []
     items.value = allItems.filter(i => i.is_active === 1 || i.is_active === true)
+    reconcileCart()
   }
+}
+
+// The cart survives page switches, so an admin price change or deactivation can
+// leave it stale. Bring it back in line with what the server would actually book.
+function reconcileCart() {
+  const available = new Map(items.value.map(item => [item.id, item]))
+  const removed: string[] = []
+  let priceChanged = false
+
+  orderItems.value = orderItems.value.filter((line) => {
+    const item = available.get(line.id)
+    if (!item) {
+      removed.push(String(line.name))
+      return false
+    }
+
+    const price = Number(item.price)
+    const deposit = Number(item.deposit ?? 0)
+
+    if (Number(line.price) !== price || Number(line.deposit ?? 0) !== deposit) {
+      line.price = price
+      line.deposit = deposit
+      line.name = item.name
+      priceChanged = true
+    }
+
+    return true
+  })
+
+  for (const name of removed) toast.error(t('checkout.itemUnavailable', { name }))
+  if (priceChanged) toast.info(t('checkout.priceUpdated'))
 }
 
 onMounted(loadItems)
@@ -313,6 +345,7 @@ async function finishOrder() {
   showConfirm.value = false
 
   let orderId: number | null = null
+  let bookedTotal: number | null = null
 
   if (orderItems.value.length > 0) {
     const res = await $fetch('/api/orders/create', {
@@ -320,7 +353,7 @@ async function finishOrder() {
       body: {
         cashier_id: selectedCashier.value,
         event_id: selectedEvent.value,
-        items: orderItems.value,
+        items: orderItems.value.map(line => ({ id: line.id, quantity: line.quantity })),
         is_fachschaft: isFachschaft.value
       }
     })
@@ -331,15 +364,23 @@ async function finishOrder() {
     }
 
     orderId = 'order_id' in res ? Number(res.order_id) : null
+    bookedTotal = 'total' in res ? Number(res.total) : null
   }
 
-  if (effectiveDonation.value > 0) {
+  // The server-side total is authoritative: a price change between adding the
+  // item and submitting must not turn into a wrong (or negative) donation.
+  const donationTotal = bookedTotal ?? total.value
+  const donationAmount = donationMode.value === 'paid'
+    ? Math.max(0, Math.round((paidAmount.value - donationTotal) * 100) / 100)
+    : effectiveDonation.value
+
+  if (donationAmount > 0) {
     const donRes = await $fetch('/api/donations/create', {
       method: 'POST',
       body: {
         cashier_id: selectedCashier.value,
         event_id: selectedEvent.value,
-        amount: effectiveDonation.value,
+        amount: donationAmount,
         order_id: orderId
       }
     })
@@ -350,10 +391,14 @@ async function finishOrder() {
     }
   }
 
+  const totalMismatch = bookedTotal !== null && Math.abs(bookedTotal - total.value) >= 0.005
+
   orderItems.value = []
   isFachschaft.value = false
   setDonationMode(null)
 
-  toast.success(t('checkout.saved'))
+  toast.success(totalMismatch
+    ? t('checkout.savedWithTotal', { total: bookedTotal!.toFixed(2) })
+    : t('checkout.saved'))
 }
 </script>

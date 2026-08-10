@@ -21,12 +21,12 @@
             >
               <span class="truncate">{{ i.name }}</span>
               <span class="text-right">{{ i.quantity }} {{ t('overview.pcs') }}</span>
-              <span class="text-right">{{ i.revenue }} €</span>
+              <span class="text-right">{{ Number(i.revenue).toFixed(2) }} €</span>
             </li>
           </ul>
 
           <div class="text-right font-bold mt-3">
-            {{ t('common.total') }}: {{ data.regular.totalRevenue }} €
+            {{ t('common.total') }}: {{ data.regular.totalRevenue.toFixed(2) }} €
           </div>
         </div>
 
@@ -41,12 +41,12 @@
             >
               <span class="truncate">{{ i.name }}</span>
               <span class="text-right">{{ i.quantity }} {{ t('overview.pcs') }}</span>
-              <span class="text-right">{{ i.worth }} €</span>
+              <span class="text-right">{{ Number(i.worth).toFixed(2) }} €</span>
             </li>
           </ul>
 
           <div class="text-right font-bold mt-3">
-            {{ t('common.total') }}: {{ data.fachschaft.totalWorth }} €
+            {{ t('common.total') }}: {{ data.fachschaft.totalWorth.toFixed(2) }} €
           </div>
         </div>
 
@@ -60,7 +60,14 @@
 
           <div class="flex justify-between font-bold">
             <span>{{ t('overview.revenue') }}</span>
-            <span>{{ data.payments.revenue }} €</span>
+            <span>{{ Number(data.payments.revenue).toFixed(2) }} €</span>
+          </div>
+
+          <div v-if="paymentAmounts.length > 1" class="mt-2 text-sm text-slate-500">
+            {{ t('overview.mixedPaymentAmounts') }}
+          </div>
+          <div v-else-if="paymentAmounts.length === 1" class="mt-2 text-sm text-slate-500">
+            {{ t('overview.paymentAmountEach', { amount: (paymentAmounts[0]?.amount ?? 0).toFixed(2) }) }}
           </div>
         </div>
 
@@ -177,6 +184,7 @@ const loading = ref(true)
 const MAX_BAR_HEIGHT = 160
 
 const hourly = computed<any[]>(() => data.value?.hourly ?? [])
+const paymentAmounts = computed<Array<{ amount: number, count: number }>>(() => data.value?.payments?.amounts ?? [])
 const maxHourlyRevenue = computed(() => hourly.value.reduce((max: number, entry: any) => Math.max(max, Number(entry.revenue)), 0))
 
 function barHeight(revenue: number) {

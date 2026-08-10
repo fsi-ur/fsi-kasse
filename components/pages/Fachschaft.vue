@@ -24,7 +24,7 @@
         <button
           class="btn-primary"
           :disabled="!selectedMember || !selectedCashier || !selectedEvent"
-          @click="showConfirm = true"
+          @click="openConfirm"
         >
           {{ t('fachschaft.markPaid', { amount: formattedAmount }) }}
         </button>
@@ -41,6 +41,7 @@
             <div class="font-semibold">{{ p.member }}</div>
             <div class="text-sm text-gray-500">
               {{ t('history.cashier', { name: p.cashier }) }} — {{ formatDate(p.created_at) }}
+              — {{ t('fachschaft.paymentAmount', { amount: Number(p.amount).toFixed(2) }) }}
             </div>
           </li>
         </ul>
@@ -131,6 +132,13 @@ async function reload() {
 
 onMounted(reload)
 onRefresh(reload)
+
+// Refresh the setting first so the confirmation names the amount that will
+// actually be booked, even if another session just changed it.
+async function openConfirm() {
+  await loadSettings(true)
+  showConfirm.value = true
+}
 
 async function markPaid() {
   showConfirm.value = false

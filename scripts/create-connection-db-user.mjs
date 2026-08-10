@@ -24,6 +24,8 @@ const SELECT_TABLES = [
   'fachschaft_payments',
   'app_settings',
   'donations',
+  'item_price_history',
+  'app_settings_history',
 ]
 
 if (!CONNECTION_DB_USER || !CONNECTION_DB_PASSWORD) {

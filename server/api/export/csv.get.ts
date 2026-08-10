@@ -13,16 +13,31 @@ export default defineEventHandler(async (event) => {
       o.created_at,
       o.fachschaft,
       c.name AS cashier,
-      i.name AS item,
+      COALESCE(i.name, oi.item_name) AS item,
       oi.quantity,
-      i.price,
-      IFNULL(i.deposit, 0) AS deposit
+      oi.unit_price AS price,
+      oi.unit_deposit AS deposit
     FROM orders o
     JOIN cashiers c ON o.cashier_id = c.id
     JOIN order_items oi ON oi.order_id = o.id
-    JOIN items i ON oi.item_id = i.id
+    LEFT JOIN items i ON oi.item_id = i.id
     JOIN events e ON e.id = o.event_id
     ORDER BY o.created_at DESC
+  `)
+
+  const paymentRows = await query(`
+    SELECT
+      p.id AS payment_id,
+      e.name AS event,
+      p.created_at,
+      c.name AS cashier,
+      m.name AS member,
+      p.amount
+    FROM fachschaft_payments p
+    JOIN cashiers c ON p.cashier_id = c.id
+    JOIN cashiers m ON p.member_id = m.id
+    JOIN events e ON p.event_id = e.id
+    ORDER BY p.created_at DESC
   `)
 
   const donationRows = await query(`
@@ -55,9 +70,22 @@ export default defineEventHandler(async (event) => {
       row.fachschaft,
       `"${row.item}"`,
       row.quantity,
-      row.price,
-      row.deposit,
+      Number(row.price).toFixed(2),
+      Number(row.deposit).toFixed(2),
       total.toFixed(2)
+    ].join(',')}`
+  }
+
+  csv += '\n\nPayment ID,Event,Date,Cashier,Member,Amount'
+
+  for (const row of paymentRows as any[]) {
+    csv += `\n${[
+      row.payment_id,
+      `"${row.event}"`,
+      new Date(row.created_at).toISOString(),
+      `"${row.cashier}"`,
+      `"${row.member}"`,
+      Number(row.amount).toFixed(2)
     ].join(',')}`
   }
 

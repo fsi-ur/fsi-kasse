@@ -19,16 +19,17 @@ export default defineEventHandler(async (event) => {
       o.created_at,
       c.id AS cashier_id,
       c.name AS cashier_name,
-      i.id AS item_id,
-      i.name AS item_name,
-      i.price AS item_price,
-      i.deposit AS item_deposit,
+      oi.id AS line_id,
+      oi.item_id,
+      COALESCE(i.name, oi.item_name) AS item_name,
+      oi.unit_price AS item_price,
+      oi.unit_deposit AS item_deposit,
       oi.quantity
     FROM orders o
     JOIN cashiers c ON o.cashier_id = c.id
     JOIN order_items oi ON o.id = oi.order_id
-    JOIN items i ON oi.item_id = i.id
-    WHERE event_id = ?
+    LEFT JOIN items i ON oi.item_id = i.id
+    WHERE o.event_id = ?
     ORDER BY o.created_at DESC, o.id DESC
   `, [eventId])
 
@@ -49,10 +50,13 @@ export default defineEventHandler(async (event) => {
     }
 
     order.items.push({
-      id: row.item_id,
+      // The order-line id, not the item id: item_id is nullable for deleted
+      // items and would collide across lines when used as a list key.
+      id: row.line_id,
+      item_id: row.item_id,
       name: row.item_name,
-      price: row.item_price,
-      deposit: row.item_deposit,
+      price: Number(row.item_price),
+      deposit: Number(row.item_deposit),
       quantity: row.quantity
     })
   }

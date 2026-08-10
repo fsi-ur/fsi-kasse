@@ -13,11 +13,33 @@ npm scripts (they read the environment from `.env`):
 ```bash
 npm run setup:migrate:events         # events table + event_id on orders/fachschaft_payments
 npm run setup:migrate:app-settings   # app_settings table
+npm run setup:migrate:add-donations  # donations table
+npm run setup:migrate:price-snapshots # price/amount snapshots + item_price_history + app_settings_history
 npm run setup:seed-admin             # admin bootstrap + auth role migration
 ```
 
 All of these are idempotent and run automatically inside docker compose before
 the app is built and started.
+
+`setup:migrate:price-snapshots` backfills the snapshot columns from the *current*
+item prices and the *currently configured* Fachschaft payment amount — the real
+historical values are not recoverable from the old schema. Run it **before** the
+first price change so the approximation is exact.
+
+### Preise ändern
+
+Item prices, deposits and names as well as the Fachschaft payment amount are
+editable at any time, and changes are **not** retroactive: every order line and
+every Fachschaft payment stores the value that was current when it was written
+(`order_items.unit_price` / `unit_deposit` / `item_name`,
+`fachschaft_payments.amount`). Past events therefore keep their reported revenue,
+and `items` / `app_settings` are only ever used to value *new* writes.
+`item_price_history` records who changed a price and when; it is an audit trail,
+never a source for money.
+
+An item that has been used in at least one order can no longer be deleted —
+deactivate it instead so it disappears from the checkout but stays in the
+statistics. Items that were never ordered can still be deleted as before.
 
 One-time, interactive migrations for switching an existing standalone
 installation to connected mode (these prompt for confirmation and are therefore
