@@ -130,28 +130,28 @@
         <div class="col-span-12 bg-white p-4 rounded-xl shadow-lg">
           <h2 class="text-lg font-semibold mb-4">{{ t('overview.hourlySales') }}</h2>
 
-          <div v-if="hourly.length === 0" class="text-gray-400">
+          <div v-if="hourlyBars.length === 0" class="text-gray-400">
             {{ t('overview.noHourlySales') }}
           </div>
 
-          <div v-else class="overflow-x-auto pb-1">
+          <div v-else class="overflow-x-auto pb-1 hourly-chart-scroll">
             <div class="flex items-end gap-2 min-w-fit">
               <div
-                v-for="entry in hourly"
+                v-for="entry in hourlyBars"
                 :key="entry.hour"
                 class="flex flex-col items-center flex-1 min-w-14"
-                :title="`${formatCurrency(entry.revenue)} — ${entry.quantity} ${t('overview.pcs')}`"
+                :title="`${entry.revenueLabel} — ${entry.quantity} ${t('overview.pcs')}`"
               >
-                <span class="text-xs text-slate-600 mb-1 whitespace-nowrap">{{ formatCurrency(entry.revenue) }}</span>
+                <span class="text-xs text-slate-600 mb-1 whitespace-nowrap">{{ entry.revenueLabel }}</span>
                 <div
                   class="w-full rounded-t-md bg-orange-500"
-                  :style="{ height: `${barHeight(entry.revenue)}px` }"
+                  :style="{ height: `${entry.height}px` }"
                 ></div>
                 <span class="text-xs text-slate-500 mt-1 whitespace-nowrap border-t border-slate-300 w-full text-center pt-1">
-                  {{ hourLabel(entry.hour) }}
+                  {{ entry.hourLabel }}
                 </span>
                 <span class="text-xs text-slate-400 whitespace-nowrap h-4">
-                  {{ dayLabel(entry.hour) }}
+                  {{ entry.dayLabel }}
                 </span>
               </div>
             </div>
@@ -189,26 +189,40 @@ const hourly = computed<any[]>(() => data.value?.hourly ?? [])
 const paymentAmounts = computed<Array<{ amount: number, count: number }>>(() => data.value?.payments?.amounts ?? [])
 const maxHourlyRevenue = computed(() => hourly.value.reduce((max: number, entry: any) => Math.max(max, Number(entry.revenue)), 0))
 
-function barHeight(revenue: number) {
-  if (maxHourlyRevenue.value <= 0) return 2
-  const scaled = Math.round((Number(revenue) / maxHourlyRevenue.value) * MAX_BAR_HEIGHT)
-  return Math.max(Number(revenue) > 0 ? 4 : 2, scaled)
-}
-
 function toBerlinIso(hour: string) {
   return new Date(hour.replace(' ', 'T') + 'Z').toLocaleString('sv-SE', { timeZone: 'Europe/Berlin' })
 }
 
-function hourLabel(hour: string) {
-  return toBerlinIso(hour).slice(11, 16)
-}
+// Everything a bar needs (labels, formatted currency, height) is derived here
+// once per `hourly` change instead of via plain functions called from the
+// template — those re-run on every render and each re-parse the date and
+// re-instantiate an Intl formatter, which got noticeably slow once an event
+// had many hourly buckets.
+const hourlyBars = computed(() => {
+  const max = maxHourlyRevenue.value
+  let previousDate = ''
 
-function dayLabel(hour: string) {
-  const index = hourly.value.findIndex((entry: any) => entry.hour === hour)
-  const berlinDate = toBerlinIso(hour).slice(0, 10)
-  if (index > 0 && toBerlinIso(hourly.value[index - 1].hour).slice(0, 10) === berlinDate) return ''
-  return `${berlinDate.slice(8, 10)}.${berlinDate.slice(5, 7)}.`
-}
+  return hourly.value.map((entry: any) => {
+    const revenue = Number(entry.revenue)
+    const berlinIso = toBerlinIso(entry.hour)
+    const berlinDate = berlinIso.slice(0, 10)
+    const dayLabel = berlinDate === previousDate ? '' : `${berlinDate.slice(8, 10)}.${berlinDate.slice(5, 7)}.`
+    previousDate = berlinDate
+
+    const scaled = Math.round((max > 0 ? revenue / max : 0) * MAX_BAR_HEIGHT)
+    const height = max <= 0 ? 2 : Math.max(revenue > 0 ? 4 : 2, scaled)
+
+    return {
+      hour: entry.hour,
+      revenue,
+      quantity: entry.quantity,
+      revenueLabel: formatCurrency(revenue),
+      hourLabel: berlinIso.slice(11, 16),
+      dayLabel,
+      height,
+    }
+  })
+})
 
 async function loadOverview() {
   if (!selectedEvent.value) {
@@ -230,3 +244,35 @@ watch(selectedEvent, () => {
 onMounted(loadOverview)
 onRefresh(loadOverview)
 </script>
+
+<style scoped>
+/* main.css hides scrollbars globally; re-enable one here so it's obvious the
+   chart scrolls once an event has more hourly bars than fit on screen. */
+.hourly-chart-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9; /* slate-400 / slate-100 */
+}
+
+.hourly-chart-scroll::-webkit-scrollbar {
+  display: block;
+  height: 10px;
+}
+
+/* Chrome clips the scrollbar's hit-rectangle to hard square edges no matter
+   what border-radius says — the radius only shows where the painted
+   background is inset from that edge. The thumb gets that inset for free
+   (it floats shorter than the full track); the track needs it forced via a
+   transparent border + padding-box clip, or its rounded ends get clipped away. */
+.hourly-chart-scroll::-webkit-scrollbar-track,
+.hourly-chart-scroll::-webkit-scrollbar-track-piece {
+  background-color: #f1f5f9; /* slate-100 */
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+}
+
+.hourly-chart-scroll::-webkit-scrollbar-thumb {
+  background-color: #94a3b8; /* slate-400 */
+  border-radius: 9999px;
+}
+</style>

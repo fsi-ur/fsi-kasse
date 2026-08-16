@@ -1,16 +1,28 @@
 import { useI18n } from '~/composables/useI18n'
 
+// Intl.NumberFormat construction is far costlier than formatting itself, and
+// callers like the overview's hourly chart format many values per render —
+// caching one formatter per (locale, options) pair avoids rebuilding it
+// on every single call.
+const currencyFormatterCache = new Map<string, Intl.NumberFormat>()
+
 export function useLocaleFormatters() {
   const { locale } = useI18n()
 
   function formatCurrency(value: number, options?: Intl.NumberFormatOptions) {
-    return new Intl.NumberFormat(locale.value, {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-      ...options,
-    }).format(value)
+    const cacheKey = `${locale.value}|${JSON.stringify(options ?? {})}`
+    let formatter = currencyFormatterCache.get(cacheKey)
+    if (!formatter) {
+      formatter = new Intl.NumberFormat(locale.value, {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+        ...options,
+      })
+      currencyFormatterCache.set(cacheKey, formatter)
+    }
+    return formatter.format(value)
   }
 
   function parseUtcDate(value: string): Date {

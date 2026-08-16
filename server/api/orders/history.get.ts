@@ -35,9 +35,10 @@ export default defineEventHandler(async (event) => {
 
   const data = normalizeBigInt(rows)
   const orders: any[] = []
+  const ordersById = new Map<number, any>()
 
   for (const row of data as any[]) {
-    let order = orders.find(entry => entry.id === row.order_id)
+    let order = ordersById.get(row.order_id)
     if (!order) {
       order = {
         id: row.order_id,
@@ -46,6 +47,7 @@ export default defineEventHandler(async (event) => {
         created_at: row.created_at,
         items: []
       }
+      ordersById.set(row.order_id, order)
       orders.push(order)
     }
 
