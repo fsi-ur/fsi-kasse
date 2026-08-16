@@ -10,9 +10,12 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'Event management is disabled in connected mode' }
   }
 
-  const { name, is_active = 1 } = await readBody(event)
-  if (!name) return { ok: false, error: 'Missing fields' }
+  const { name, starts_at, ends_at, is_active = 1 } = await readBody(event)
+  if (!name || !starts_at || !ends_at) return { ok: false, error: 'Missing fields' }
+  if (new Date(String(ends_at).replace(' ', 'T')) < new Date(String(starts_at).replace(' ', 'T'))) {
+    return { ok: false, error: 'End date must not be before start date' }
+  }
 
-  await query(`INSERT INTO events (name, is_active) VALUES (?, ?)`, [name, is_active])
+  await query(`INSERT INTO events (name, starts_at, ends_at, is_active) VALUES (?, ?, ?, ?)`, [name, starts_at, ends_at, is_active])
   return { ok: true }
 })

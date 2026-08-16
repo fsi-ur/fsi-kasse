@@ -3,6 +3,8 @@ import { accountingQuery, isConnectedAccountingMode, query, withTransaction } fr
 interface LocalEventRow {
   id: number
   name: string
+  starts_at: string
+  ends_at: string
   is_active: number
 }
 
@@ -14,12 +16,16 @@ interface LocalEventProxyRow {
 interface AccountingEventRow {
   id: number
   name: string
+  starts_at: string
+  ends_at: string
   is_active: number
 }
 
 export interface CashRegisterEvent {
   id: number
   name: string
+  starts_at: string
+  ends_at: string
   is_active: number
 }
 
@@ -28,6 +34,8 @@ async function loadAccountingEvents() {
     `SELECT
        id,
        name,
+       starts_at,
+       ends_at,
        1 AS is_active
      FROM events
      ORDER BY name ASC, starts_at ASC, id ASC`,
@@ -58,18 +66,18 @@ async function syncConnectedEventProxies(accountingEvents: AccountingEventRow[])
       if (existingProxyId) {
         await query(
           `UPDATE events
-           SET name = ?, is_active = ?
+           SET name = ?, starts_at = ?, ends_at = ?, is_active = ?
            WHERE id = ?`,
-          [String(accountingEvent.name), Number(accountingEvent.is_active), existingProxyId],
+          [String(accountingEvent.name), String(accountingEvent.starts_at), String(accountingEvent.ends_at), Number(accountingEvent.is_active), existingProxyId],
           conn,
         )
         continue
       }
 
       const insertResult: any = await query(
-        `INSERT INTO events (name, accounting_event_id, is_active)
-         VALUES (?, ?, ?)`,
-        [String(accountingEvent.name), accountingEventId, Number(accountingEvent.is_active)],
+        `INSERT INTO events (name, starts_at, ends_at, accounting_event_id, is_active)
+         VALUES (?, ?, ?, ?, ?)`,
+        [String(accountingEvent.name), String(accountingEvent.starts_at), String(accountingEvent.ends_at), accountingEventId, Number(accountingEvent.is_active)],
         conn,
       )
 
@@ -81,7 +89,7 @@ async function syncConnectedEventProxies(accountingEvents: AccountingEventRow[])
 export async function getCashRegisterEvents(): Promise<CashRegisterEvent[]> {
   if (!isConnectedAccountingMode()) {
     const rows = await query<LocalEventRow[]>(
-      `SELECT id, name, is_active
+      `SELECT id, name, starts_at, ends_at, is_active
        FROM events
        ORDER BY name ASC`,
     )
@@ -89,6 +97,8 @@ export async function getCashRegisterEvents(): Promise<CashRegisterEvent[]> {
     return rows.map(row => ({
       id: Number(row.id),
       name: String(row.name),
+      starts_at: String(row.starts_at),
+      ends_at: String(row.ends_at),
       is_active: Number(row.is_active),
     }))
   }
@@ -118,6 +128,8 @@ export async function getCashRegisterEvents(): Promise<CashRegisterEvent[]> {
     return [{
       id: localId,
       name: String(accountingEvent.name),
+      starts_at: String(accountingEvent.starts_at),
+      ends_at: String(accountingEvent.ends_at),
       is_active: Number(accountingEvent.is_active),
     }]
   })
@@ -128,7 +140,7 @@ export async function getCashRegisterEventById(eventId: number): Promise<CashReg
 
   if (!isConnectedAccountingMode()) {
     const rows = await query<LocalEventRow[]>(
-      `SELECT id, name, is_active
+      `SELECT id, name, starts_at, ends_at, is_active
        FROM events
        WHERE id = ?
        LIMIT 1`,
@@ -140,6 +152,8 @@ export async function getCashRegisterEventById(eventId: number): Promise<CashReg
     return {
       id: Number(rows[0].id),
       name: String(rows[0].name),
+      starts_at: String(rows[0].starts_at),
+      ends_at: String(rows[0].ends_at),
       is_active: Number(rows[0].is_active),
     }
   }

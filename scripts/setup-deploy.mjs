@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 
 const steps = [
   { label: 'events migration', command: 'node', args: ['scripts/migrate-events.mjs'], required: true, attempts: 6 },
+  { label: 'event dates migration', command: 'node', args: ['scripts/migrate-add-event-dates.mjs'], required: true, attempts: 6 },
   { label: 'app settings migration', command: 'node', args: ['scripts/migrate-app-settings.mjs'], required: true, attempts: 6 },
   { label: 'donations migration', command: 'node', args: ['scripts/migrate-add-donations.mjs'], required: true, attempts: 6 },
   { label: 'item price snapshots migration', command: 'node', args: ['scripts/migrate-item-price-snapshots.mjs'], required: true, attempts: 6 },

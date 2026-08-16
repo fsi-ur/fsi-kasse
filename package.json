@@ -10,6 +10,7 @@
     "start": "node .output/server/index.mjs",
     "setup:deploy": "node scripts/setup-deploy.mjs",
     "setup:migrate:events": "node --env-file=.env scripts/migrate-events.mjs",
+    "setup:migrate:event-dates": "node --env-file=.env scripts/migrate-add-event-dates.mjs",
     "setup:migrate:app-settings": "node --env-file=.env scripts/migrate-app-settings.mjs",
     "setup:migrate:add-donations": "node --env-file=.env scripts/migrate-add-donations.mjs",
     "setup:migrate:price-snapshots": "node --env-file=.env scripts/migrate-item-price-snapshots.mjs",
