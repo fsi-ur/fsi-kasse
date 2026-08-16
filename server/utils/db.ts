@@ -85,6 +85,10 @@ export function isConnectedAccountingMode() {
   return accountingMode === 'connected'
 }
 
+export async function getDbConnection(): Promise<mariadb.PoolConnection> {
+  return dataPool.getConnection()
+}
+
 export async function query<T = any>(sql: string, params?: unknown[], conn?: mariadb.PoolConnection): Promise<T> {
   return runQuery<T>(dataPool, sql, params, conn)
 }

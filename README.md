@@ -106,6 +106,26 @@ endpoints directly (cookie auth). To support that:
 - `ACCOUNTING_APP_ORIGINS` — comma separated origins allowed to call the API
   cross-origin (only needed when the apps do not share a domain).
 
+### Database snapshots
+
+Settings → Kasse offers an encrypted snapshot of the whole cash register
+database (everything in `DB_NAME`, never the accounting database), separate
+from the plain CSV export above. It requires `cash_register.manage`.
+
+- **Create**: choose a password (≥ 12 characters) and download
+  `kassensystem-db-<date>.json.enc`. The password is never stored — without it
+  the snapshot cannot be decrypted again, so keep it somewhere safe.
+- **Restore**: upload the `.enc` file and its password. The server previews
+  the contents (table/row counts, integrity checksum, the accounting mode it
+  was created in) before anything is written; restoring requires the schema
+  to match and typing `RESTORE` to confirm. It replaces every table in
+  `DB_NAME`, including `users`/`roles`/`user_roles`/`role_permissions`/
+  `user_permissions` in **standalone** mode — an old snapshot can therefore
+  reinstate old passwords or lock out accounts created since. In **connected**
+  mode those auth tables are unused leftovers and the live accounts (in the
+  accounting database) are left untouched. Session tokens are never included
+  in a snapshot; restoring in standalone mode logs everyone out.
+
 ## Environment variables
 
 See [.env.example](.env.example) for the full list:
