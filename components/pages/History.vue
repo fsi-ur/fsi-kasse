@@ -5,10 +5,7 @@
     </template>
 
     <template #cards>
-      <div v-if="loading" class="col-span-12 text-gray-500">{{ t('common.loading') }}</div>
-
       <CommonPageTableCard
-        v-else
         :title="t('history.title')"
         persist-key="history-orders"
         :search-value="search"
@@ -18,6 +15,7 @@
           v-model:search="search"
           persist-key="history-orders"
           :rows="orders"
+          :loading="loading"
           :columns="columns"
           :empty-text="t('history.noOrders')"
           :show-actions="false"
@@ -27,7 +25,7 @@
             <CommonStatusBadge
               v-if="row.is_fachschaft"
               :label="t('history.fachschaftBadge')"
-              tone="green"
+              tone="success"
             />
             <span v-else>{{ t('history.typeSale') }}</span>
           </template>
@@ -45,7 +43,7 @@
             <CommonStatusBadge
               v-if="row.is_fachschaft"
               :label="t('history.fachschaftBadge')"
-              tone="green"
+              tone="success"
             />
           </template>
         </CommonAdvancedTable>
@@ -58,13 +56,13 @@
       <li
         v-for="item in openedOrder.items"
         :key="item.id"
-        class="grid grid-cols-6 py-2 border-b border-slate-200"
+        class="grid grid-cols-6 py-2 border-b border-base-200"
       >
         <span class="col-span-1">{{ item.quantity }}</span>
         <span class="col-span-3">{{ item.name }}
           <span
             v-if="item.deposit > 0"
-            class="text-xs text-gray-500"
+            class="text-xs text-base-500"
           >
             {{ t('checkout.depositSuffix', { amount: formatCurrency(item.deposit) }) }}
           </span>
@@ -155,16 +153,19 @@ function openOrder(order: any) {
 }
 
 async function loadHistory() {
-  const res = await $fetch(`/api/orders/history?eventId=${selectedEvent.value}`)
-
-  if (res.ok) orders.value = 'orders' in res ? res.orders : []
-  loading.value = false
+  try {
+    const res = await $fetch(`/api/orders/history?eventId=${selectedEvent.value}`)
+    if (res.ok) orders.value = 'orders' in res ? res.orders : []
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(loadHistory)
 onRefresh(loadHistory)
 
 watch(selectedEvent, () => {
+  loading.value = true
   loadHistory()
 })
 </script>

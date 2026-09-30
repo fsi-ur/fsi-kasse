@@ -15,7 +15,7 @@
     >
       <div ref="headlineGroupRef" class="flex min-w-0 items-center gap-3">
         <button
-          class="bg-gray-900 text-white rounded-md md:hidden w-8 h-8 flex items-center justify-center cursor-pointer"
+          class="bg-base-900 text-white rounded-md md:hidden w-8 h-8 flex items-center justify-center cursor-pointer"
           @click="$emit('openMenu')"
         >
           <Icon

@@ -1,13 +1,13 @@
 <template>
   <div
-    v-if="tabs.length > 0"
+    v-if="tabs.length > 1"
     :class="[
       'relative min-w-0 max-w-full',
       isBelowHeadline ? 'basis-full w-full' : 'ml-auto shrink-0',
     ]"
     :style="containerStyle"
   >
-    <div class="-mx-6 sm:mx-0 sm:rounded-xl bg-slate-200 p-2">
+    <div class="-mx-6 sm:mx-0 sm:rounded-xl bg-base-200 p-2">
       <div class="space-y-2">
         <div
           v-for="(row, rowIndex) in tabRows"
@@ -19,10 +19,10 @@
             :key="tab.key"
             type="button"
             :aria-pressed="modelValue === tab.key"
-            class="min-w-0 rounded-lg px-4 py-2 text-center text-sm font-medium whitespace-nowrap transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-200"
+            class="min-w-0 rounded-lg px-4 py-2 text-center text-sm font-medium whitespace-nowrap transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 focus-visible:ring-offset-2 focus-visible:ring-offset-base-200"
             :class="modelValue === tab.key
-              ? 'bg-orange-500 text-white'
-              : 'bg-slate-100 text-slate-700 hover:bg-white'"
+              ? 'bg-accent-500 text-white'
+              : 'bg-base-100 text-base-700 hover:bg-white'"
             :style="tabStyle()"
             @click="emit('update:modelValue', tab.key)"
           >
@@ -48,6 +48,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, type CSSProperties, type ComponentPublicInstance } from 'vue'
 import { useTabOverviewLayout, type TabOverviewItem } from '~/composables/useTabOverviewLayout'
+import { useAuth } from '~/composables/useAuth'
 
 const props = defineProps<{
   modelValue: string
@@ -59,6 +60,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
 }>()
+
+const { user, fetchSession } = useAuth()
+
+watch(
+  () => props.modelValue,
+  () => {
+    if (user.value) fetchSession()
+  },
+)
 
 const labelMeasureRefs = ref<Array<HTMLElement | null>>([])
 

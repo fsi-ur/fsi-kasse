@@ -23,7 +23,7 @@
     <template #cell-is_active="{ item }">
       <CommonStatusBadge
         :label="item.is_active ? t('common.active') : t('common.inactive')"
-        :tone="item.is_active ? 'green' : 'gray'"
+        :tone="item.is_active ? 'success' : 'baseMuted'"
       />
     </template>
   </PagesSettingsEntityManager>

@@ -2,36 +2,61 @@
   <div class="inline-flex items-center gap-1 relative">
     <button
       type="button"
-      class="inline-flex items-center gap-1 hover:text-blue-700 cursor-pointer"
+      class="inline-flex items-center gap-1 hover:text-link-700 cursor-pointer"
       @click="$emit('toggle-sort')"
     >
       <span>{{ label }}</span>
-      <Icon :name="sortIcon" class="w-4 h-4" />
+      <Icon :name="sortIcon" class="w-4 h-4" :class="sortDirection ? 'text-link-600' : 'text-base-400'" />
     </button>
 
     <button
       v-if="filterable"
       ref="triggerRef"
       type="button"
-      class="pt-1 pr-1 pl-1 rounded-lg border hover:bg-slate-50 cursor-pointer"
-      :class="isFilterActive ? 'border-blue-500 text-blue-600' : 'border-slate-300 text-slate-500'"
+      class="inline-flex items-center gap-1 rounded-lg border p-1 transition cursor-pointer"
+      :class="isFilterActive
+        ? 'border-link-500 bg-link-50 text-link-700 hover:bg-link-100'
+        : 'border-base-300 text-base-500 hover:bg-base-50 hover:text-base-700'"
+      :title="filterButtonTitle"
+      :aria-label="filterButtonTitle"
+      aria-haspopup="dialog"
+      :aria-expanded="menuOpen"
       @click.stop="toggleMenu"
     >
       <Icon name="material-symbols:filter-list-rounded" class="w-4 h-4" />
+      <span v-if="activeCount > 1" class="pr-0.5 text-[10px] font-semibold leading-none tabular-nums">
+        {{ activeCount }}
+      </span>
     </button>
 
     <Teleport defer to="#page-root">
       <div
         v-if="filterable && menuOpen"
         ref="menuRef"
-        class="fixed z-100 w-72 rounded-lg border border-slate-200 bg-white shadow-xl ring-1 ring-slate-900/5 overflow-hidden"
+        role="dialog"
+        :aria-label="filterButtonTitle"
+        class="fixed z-100 w-72 max-w-[calc(100vw-1rem)] rounded-xl border border-base-200 bg-white shadow-xl ring-1 ring-base-900/5 overflow-hidden"
         :style="{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }"
         @click.stop
       >
+        <div class="flex items-center justify-between gap-2 border-b border-base-200 px-2.5 py-2">
+          <p class="min-w-0 truncate text-xs font-semibold text-base-700">{{ label }}</p>
+          <button
+            type="button"
+            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-base-400 transition cursor-pointer hover:bg-base-100 hover:text-base-600"
+            :aria-label="t('actions.close')"
+            @click="menuOpen = false"
+          >
+            <Icon name="material-symbols:close-rounded" class="h-4 w-4" />
+          </button>
+        </div>
+
         <CommonTableFilterEditor
           :filter-type="filterType"
           :filter="filter"
           :text-options="textOptions"
+          :number-bounds="numberBounds"
+          autofocus
           @apply-text-filter="onApplyTextFilter"
           @apply-range-filter="onApplyRangeFilter"
           @reset-filter="onResetFilter"
@@ -43,7 +68,8 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import type { ColumnFilter, SortDirection, TableFilterType } from '~/composables/useAdvancedTable'
+import { useI18n } from '~/composables/useI18n'
+import type { ColumnFilter, SortDirection, TableFilterType, TextFilterOption } from '~/composables/useAdvancedTable'
 
 const props = withDefaults(defineProps<{
   label: string
@@ -52,12 +78,14 @@ const props = withDefaults(defineProps<{
   isFilterActive?: boolean
   filter?: ColumnFilter
   filterable?: boolean
-  textOptions?: string[]
+  textOptions?: TextFilterOption[]
+  numberBounds?: { min: number, max: number } | null
 }>(), {
   filterType: 'text',
   isFilterActive: false,
   filter: () => ({ type: 'text', selected: [] }),
   filterable: true,
+  numberBounds: null,
 })
 
 const emit = defineEmits<{
@@ -66,6 +94,8 @@ const emit = defineEmits<{
   (e: 'apply-range-filter', payload: { min: string, max: string }): void
   (e: 'reset-filter'): void
 }>()
+
+const { t } = useI18n()
 
 const menuOpen = ref(false)
 const triggerRef = ref<HTMLElement | null>(null)
@@ -76,6 +106,17 @@ const sortIcon = computed(() => {
   if (props.sortDirection === 'asc') return 'material-symbols:arrow-upward-rounded'
   if (props.sortDirection === 'desc') return 'material-symbols:arrow-downward-rounded'
   return 'material-symbols:unfold-more-rounded'
+})
+
+const activeCount = computed(() => {
+  if (!props.isFilterActive) return 0
+  return props.filter.type === 'text' ? props.filter.selected.length : 1
+})
+
+const filterButtonTitle = computed(() => {
+  return props.isFilterActive
+    ? `${t('common.filter')}: ${props.label} — ${t('common.filterActive')}`
+    : `${t('common.filter')}: ${props.label}`
 })
 
 async function setMenuPosition() {
@@ -116,6 +157,13 @@ function onDocumentClick(event: MouseEvent) {
   }
 }
 
+function onDocumentKeydown(event: KeyboardEvent) {
+  if (!menuOpen.value || event.key !== 'Escape') return
+  event.stopPropagation()
+  menuOpen.value = false
+  triggerRef.value?.focus()
+}
+
 function onWindowChange() {
   if (!menuOpen.value) return
   setMenuPosition()
@@ -147,10 +195,12 @@ function onResetFilter() {
 watch(menuOpen, (isOpen) => {
   if (isOpen) {
     document.addEventListener('click', onDocumentClick, true)
+    document.addEventListener('keydown', onDocumentKeydown, true)
     window.addEventListener('resize', onWindowChange)
     window.addEventListener('scroll', onWindowChange, true)
   } else {
     document.removeEventListener('click', onDocumentClick, true)
+    document.removeEventListener('keydown', onDocumentKeydown, true)
     window.removeEventListener('resize', onWindowChange)
     window.removeEventListener('scroll', onWindowChange, true)
   }
@@ -158,6 +208,7 @@ watch(menuOpen, (isOpen) => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocumentClick, true)
+  document.removeEventListener('keydown', onDocumentKeydown, true)
   window.removeEventListener('resize', onWindowChange)
   window.removeEventListener('scroll', onWindowChange, true)
 })

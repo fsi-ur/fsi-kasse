@@ -15,7 +15,7 @@
         </div>
 
         <div class="flex items-center justify-between">
-          <div v-if="error" class="text-sm text-red-600">{{ error }}</div>
+          <div v-if="error" class="text-sm text-danger-600">{{ error }}</div>
           <button type="submit" class="btn-primary ml-auto">{{ t('actions.login') }}</button>
         </div>
       </form>
@@ -34,13 +34,31 @@ const password = ref('')
 const error = ref('')
 
 const { login } = useAuth()
-const { setPage } = usePage()
+const { setPage, consumePendingLoginTarget } = usePage()
 const { t } = useI18n()
+
+const errorMessagesByCode: Record<string, string> = {
+  missing_credentials: 'login.errorMissingCredentials',
+  invalid_credentials: 'login.errorInvalidCredentials',
+  inactive_user: 'login.errorInactiveUser',
+  not_authorized: 'login.errorNotAuthorized',
+  password_change_required: 'login.passwordChangeRequiredConnected',
+  server_error: 'login.errorServer',
+  network_error: 'login.errorNetwork',
+  session_not_established: 'login.errorSessionNotEstablished',
+}
 
 async function doLogin() {
   error.value = ''
   const res = await login(username.value, password.value)
   if (res.ok) {
+    // Return to the page the session was lost on, then fall back to the URL hash
+    const pendingTarget = consumePendingLoginTarget()
+    if (pendingTarget) {
+      setPage(pendingTarget.page, pendingTarget.meta || undefined)
+      return
+    }
+
     const deepLink = parseDeepLinkHash()
     if (deepLink && deepLink.page !== 'Login') {
       setPage(deepLink.page, deepLink.meta || undefined)
@@ -48,12 +66,8 @@ async function doLogin() {
       setPage('Checkout')
     }
   } else {
-    error.value = translateLoginError(res.error)
+    const key = res.code ? errorMessagesByCode[res.code] : undefined
+    error.value = key ? t(key) : (res.error || t('login.error'))
   }
-}
-
-function translateLoginError(serverError?: string) {
-  if (serverError === 'Password change required') return t('login.passwordChangeRequiredConnected')
-  return serverError || t('login.error')
 }
 </script>

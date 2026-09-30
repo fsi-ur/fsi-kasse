@@ -40,6 +40,7 @@
           v-model:search="paymentSearch"
           persist-key="fachschaft-payments"
           :rows="payments"
+          :loading="paymentsLoading"
           :columns="paymentColumns"
           :empty-text="t('fachschaft.noPayments')"
           :show-actions="false"
@@ -72,6 +73,7 @@ import type { AdvancedTableColumn } from '~/composables/useAdvancedTable'
 
 const members = ref<any[]>([])
 const payments = ref<any[]>([])
+const paymentsLoading = ref(true)
 const paymentSearch = ref('')
 const selectedMember = ref<number | string>('')
 const memberQuery = ref('')
@@ -186,13 +188,18 @@ async function markPaid() {
 }
 
 async function loadPayments() {
-  const res2 = await $fetch(`/api/fachschaft/payments?eventId=${selectedEvent.value}`)
-  if (res2.ok) {
-    if ('payments' in res2) payments.value = res2.payments
+  try {
+    const res2 = await $fetch(`/api/fachschaft/payments?eventId=${selectedEvent.value}`)
+    if (res2.ok) {
+      if ('payments' in res2) payments.value = res2.payments
+    }
+  } finally {
+    paymentsLoading.value = false
   }
 }
 
 watch(selectedEvent, () => {
+  paymentsLoading.value = true
   loadPayments()
 })
 </script>

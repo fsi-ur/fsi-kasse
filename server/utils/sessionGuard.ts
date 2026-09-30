@@ -44,6 +44,12 @@ export async function getCurrentUserFromEvent(event: any, touch: boolean): Promi
   const session = normalizeBigInt(await getSessionByToken(token))
   if (!session) return { ok: false, error: 'Session not found' }
 
+  const isActive = session.is_active === 1 || session.is_active === '1'
+  if (!isActive) {
+    await deleteSessionByToken(token)
+    return { ok: false, error: 'User inactive' }
+  }
+
   const now = new Date()
   if (session.expires_at && new Date(session.expires_at + 'Z') < now) {
     return { ok: false, error: 'Session expired' }
@@ -74,7 +80,7 @@ export async function getCurrentUserFromEvent(event: any, touch: boolean): Promi
       role: getOverlayRole(permissions),
       roles,
       permissions,
-      is_active: session.is_active === 1 || session.is_active === '1',
+      is_active: isActive,
       must_change_password: session.must_change_password === 1 || session.must_change_password === '1'
     }
   }

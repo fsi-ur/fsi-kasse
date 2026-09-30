@@ -24,6 +24,10 @@ const { refreshKey } = useAppRefresh()
 
 const loaded = ref(false)
 
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible' && user.value) fetchSession()
+}
+
 onMounted(async () => {
   await fetchSession()
   loaded.value = true
@@ -31,6 +35,12 @@ onMounted(async () => {
   watch(currentPage, async () => {
     if (user.value) await fetchSession()
   })
+
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 
 const currentComponent = computed(() => {

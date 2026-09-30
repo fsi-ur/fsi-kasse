@@ -1,9 +1,9 @@
 <template>
   <div class="bg-white rounded-xl shadow-lg p-6 space-y-6 col-span-12">
-    <section class="rounded-xl border border-slate-200 p-4 space-y-3">
+    <section class="rounded-xl border border-base-200 p-4 space-y-3">
       <div>
         <h3 class="font-semibold">{{ t('settings.cashRegisterTitle') }}</h3>
-        <p class="text-sm text-slate-600">{{ t('settings.cashRegisterText') }}</p>
+        <p class="text-sm text-base-600">{{ t('settings.cashRegisterText') }}</p>
       </div>
 
       <div class="field max-w-xs">
@@ -19,7 +19,7 @@
         >
       </div>
 
-      <p class="text-sm text-slate-600">{{ t('settings.fachschaftPaymentNotice') }}</p>
+      <p class="text-sm text-base-600">{{ t('settings.fachschaftPaymentNotice') }}</p>
 
       <button
         class="btn-primary"
@@ -30,10 +30,10 @@
       </button>
     </section>
 
-    <section class="rounded-xl border border-slate-200 p-4 space-y-3">
+    <section class="rounded-xl border border-base-200 p-4 space-y-3">
       <div>
         <h3 class="font-semibold">{{ t('settings.exportTitle') }}</h3>
-        <p class="text-sm text-slate-600">{{ t('settings.exportText') }}</p>
+        <p class="text-sm text-base-600">{{ t('settings.exportText') }}</p>
       </div>
 
       <button class="btn-secondary" @click="exportCSV">
@@ -42,10 +42,10 @@
     </section>
 
     <template v-if="canManage">
-      <section class="rounded-xl border border-slate-200 p-4 space-y-3">
+      <section class="rounded-xl border border-base-200 p-4 space-y-3">
         <div>
           <h3 class="font-semibold">{{ t('settings.snapshot.title') }}</h3>
-          <p class="text-sm text-slate-600">{{ t('settings.snapshot.text') }}</p>
+          <p class="text-sm text-base-600">{{ t('settings.snapshot.text') }}</p>
         </div>
 
         <div class="flex flex-wrap gap-2">
@@ -68,17 +68,17 @@
           </button>
         </div>
 
-        <p class="text-xs text-slate-500">{{ t('settings.snapshot.passwordHelp') }}</p>
+        <p class="text-xs text-base-500">{{ t('settings.snapshot.passwordHelp') }}</p>
       </section>
 
-      <section class="rounded-xl border border-red-200 bg-red-50 p-4 space-y-3">
+      <section class="rounded-xl border border-danger-200 bg-danger-50 p-4 space-y-3">
         <div>
-          <h3 class="font-semibold text-red-900">{{ t('settings.snapshot.restoreTitle') }}</h3>
-          <p class="text-sm text-red-800">{{ t('settings.snapshot.restoreText') }}</p>
+          <h3 class="font-semibold text-danger-900">{{ t('settings.snapshot.restoreTitle') }}</h3>
+          <p class="text-sm text-danger-800">{{ t('settings.snapshot.restoreText') }}</p>
         </div>
 
         <label class="block space-y-1">
-          <span class="text-sm font-medium text-red-900">{{ t('settings.snapshot.fileLabel') }}</span>
+          <span class="text-sm font-medium text-danger-900">{{ t('settings.snapshot.fileLabel') }}</span>
           <input
             ref="fileInput"
             class="input bg-white"
@@ -109,16 +109,16 @@
         </button>
 
         <div v-if="isPreviewing && uploadProgress !== null" class="space-y-1">
-          <div class="h-2 overflow-hidden rounded-full bg-red-100">
-            <div class="h-full bg-orange-500" :style="{ width: `${uploadProgress}%` }" />
+          <div class="h-2 overflow-hidden rounded-full bg-danger-100">
+            <div class="h-full bg-accent-500" :style="{ width: `${uploadProgress}%` }" />
           </div>
-          <p class="text-xs text-red-800">{{ t('settings.snapshot.uploadProgress', { progress: String(uploadProgress) }) }}</p>
+          <p class="text-xs text-danger-800">{{ t('settings.snapshot.uploadProgress', { progress: String(uploadProgress) }) }}</p>
         </div>
       </section>
     </template>
 
-    <section v-else class="rounded-xl border border-slate-200 p-4">
-      <p class="text-sm text-slate-600">{{ t('settings.snapshot.noPermission') }}</p>
+    <section v-else class="rounded-xl border border-base-200 p-4">
+      <p class="text-sm text-base-600">{{ t('settings.snapshot.noPermission') }}</p>
     </section>
 
     <CommonModal
@@ -128,62 +128,62 @@
       width-class="max-w-2xl"
       @update:model-value="closeRestorePreview"
     >
-      <p class="text-sm text-slate-600">{{ t('settings.snapshot.previewText') }}</p>
+      <p class="text-sm text-base-600">{{ t('settings.snapshot.previewText') }}</p>
 
       <div class="grid md:grid-cols-2 gap-3 text-sm">
-        <div class="rounded-lg border border-slate-200 p-3">
-          <p class="text-xs text-slate-500">{{ t('settings.snapshot.previewCreatedAt') }}</p>
+        <div class="rounded-lg border border-base-200 p-3">
+          <p class="text-xs text-base-500">{{ t('settings.snapshot.previewCreatedAt') }}</p>
           <p class="font-medium">{{ previewCreatedAtLabel }}</p>
         </div>
-        <div class="rounded-lg border border-slate-200 p-3">
-          <p class="text-xs text-slate-500">{{ t('settings.snapshot.previewDatabase') }}</p>
+        <div class="rounded-lg border border-base-200 p-3">
+          <p class="text-xs text-base-500">{{ t('settings.snapshot.previewDatabase') }}</p>
           <p class="font-medium">{{ restorePreview.database || t('settings.snapshot.previewUnknown') }}</p>
         </div>
-        <div class="rounded-lg border border-slate-200 p-3">
-          <p class="text-xs text-slate-500">{{ t('settings.snapshot.previewApp') }}</p>
+        <div class="rounded-lg border border-base-200 p-3">
+          <p class="text-xs text-base-500">{{ t('settings.snapshot.previewApp') }}</p>
           <p class="font-medium">{{ previewAppLabel }}</p>
         </div>
-        <div class="rounded-lg border border-slate-200 p-3">
-          <p class="text-xs text-slate-500">{{ t('settings.snapshot.previewSchema') }}</p>
+        <div class="rounded-lg border border-base-200 p-3">
+          <p class="text-xs text-base-500">{{ t('settings.snapshot.previewSchema') }}</p>
           <p class="font-medium">{{ restorePreview.schemaVersion || t('settings.snapshot.previewUnknown') }}</p>
         </div>
-        <div class="rounded-lg border border-slate-200 p-3">
-          <p class="text-xs text-slate-500">{{ t('settings.snapshot.previewTables') }}</p>
+        <div class="rounded-lg border border-base-200 p-3">
+          <p class="text-xs text-base-500">{{ t('settings.snapshot.previewTables') }}</p>
           <p class="font-medium">{{ restorePreview.tables }}</p>
         </div>
-        <div class="rounded-lg border border-slate-200 p-3">
-          <p class="text-xs text-slate-500">{{ t('settings.snapshot.previewRows') }}</p>
+        <div class="rounded-lg border border-base-200 p-3">
+          <p class="text-xs text-base-500">{{ t('settings.snapshot.previewRows') }}</p>
           <p class="font-medium">{{ restorePreview.rows }}</p>
         </div>
-        <div class="rounded-lg border border-slate-200 p-3 md:col-span-2">
-          <p class="text-xs text-slate-500">{{ t('settings.snapshot.previewIntegrity') }}</p>
+        <div class="rounded-lg border border-base-200 p-3 md:col-span-2">
+          <p class="text-xs text-base-500">{{ t('settings.snapshot.previewIntegrity') }}</p>
           <p class="font-medium">{{ integrityLabel }}</p>
         </div>
-        <div class="rounded-lg border border-slate-200 p-3 md:col-span-2">
-          <p class="text-xs text-slate-500">{{ t('settings.snapshot.previewMode') }}</p>
+        <div class="rounded-lg border border-base-200 p-3 md:col-span-2">
+          <p class="text-xs text-base-500">{{ t('settings.snapshot.previewMode') }}</p>
           <p class="font-medium">{{ modeLabel(restorePreview.accountingMode) }}</p>
         </div>
       </div>
 
-      <div v-if="modeMismatch" class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+      <div v-if="modeMismatch" class="rounded-lg border border-warning-300 bg-warning-50 p-3 text-sm text-warning-900">
         {{ t('settings.snapshot.modeMismatchWarning', { snapshotMode: modeLabel(restorePreview.accountingMode), currentMode: modeLabel(restorePreview.currentAccountingMode) }) }}
       </div>
 
-      <div v-if="restorePreview.currentAccountingMode === 'connected'" class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+      <div v-if="restorePreview.currentAccountingMode === 'connected'" class="rounded-lg border border-warning-300 bg-warning-50 p-3 text-sm text-warning-900">
         {{ t('settings.snapshot.connectedNotice') }}
       </div>
 
-      <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 space-y-2">
+      <div class="rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800 space-y-2">
         <p v-if="restorePreview.currentAccountingMode === 'standalone'">{{ t('settings.snapshot.authWarning') }}</p>
         <p>{{ t('settings.snapshot.sessionsWarning') }}</p>
         <div v-if="isRestoring && uploadProgress !== null" class="space-y-1">
-          <div class="h-2 overflow-hidden rounded-full bg-red-100">
-            <div class="h-full bg-orange-500" :style="{ width: `${uploadProgress}%` }" />
+          <div class="h-2 overflow-hidden rounded-full bg-danger-100">
+            <div class="h-full bg-accent-500" :style="{ width: `${uploadProgress}%` }" />
           </div>
-          <p class="text-xs text-red-800">{{ t('settings.snapshot.uploadProgress', { progress: String(uploadProgress) }) }}</p>
+          <p class="text-xs text-danger-800">{{ t('settings.snapshot.uploadProgress', { progress: String(uploadProgress) }) }}</p>
         </div>
         <label class="block">
-          <span class="text-xs font-medium text-red-900">{{ t('settings.snapshot.confirmLabel') }}</span>
+          <span class="text-xs font-medium text-danger-900">{{ t('settings.snapshot.confirmLabel') }}</span>
           <input v-model="restoreConfirmation" class="input mt-1 bg-white" autocomplete="off">
         </label>
       </div>

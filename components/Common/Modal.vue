@@ -10,16 +10,18 @@
       @click.self="handleBackdropClick"
     >
       <section
+        ref="panelRef"
+        tabindex="-1"
         :class="[
           'w-full rounded-xl bg-white p-4 sm:p-6 shadow-xl',
-          'max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-none',
+          'scroll-panel max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-none',
           widthClass,
           panelClass,
         ]"
       >
         <header v-if="$slots.title || title" :class="headerClass">
           <slot name="title">
-            <h3 :id="titleId" class="text-lg font-semibold text-slate-900">
+            <h3 :id="titleId" class="text-lg font-semibold text-base-900">
               {{ title }}
             </h3>
           </slot>
@@ -37,40 +39,9 @@
   </Teleport>
 </template>
 
-<script lang="ts">
-let bodyScrollLockCount = 0
-let bodyScrollLockY = 0
-
-function lockBodyScroll() {
-  bodyScrollLockCount += 1
-  if (bodyScrollLockCount > 1) return
-
-  bodyScrollLockY = window.scrollY
-  const body = document.body.style
-  body.position = 'fixed'
-  body.top = `-${bodyScrollLockY}px`
-  body.left = '0'
-  body.right = '0'
-  body.overflow = 'hidden'
-}
-
-function unlockBodyScroll() {
-  if (bodyScrollLockCount === 0) return
-  bodyScrollLockCount -= 1
-  if (bodyScrollLockCount > 0) return
-
-  const body = document.body.style
-  body.position = ''
-  body.top = ''
-  body.left = ''
-  body.right = ''
-  body.overflow = ''
-  window.scrollTo(0, bodyScrollLockY)
-}
-</script>
-
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, useId, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, toRef, useId, watch } from 'vue'
+import { useBodyScrollLock } from '~/composables/useBodyScrollLock'
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
@@ -102,17 +73,70 @@ const emit = defineEmits<{
 
 const titleId = `modal-title-${useId()}`
 
-let isLockedByThisInstance = false
+const panelRef = ref<HTMLElement | null>(null)
+let previouslyFocused: HTMLElement | null = null
+
+function tabbableElements(): HTMLElement[] {
+  if (!panelRef.value) return []
+  const selector = 'a[href], button, input, select, textarea, [tabindex]'
+  return Array.from(panelRef.value.querySelectorAll<HTMLElement>(selector))
+    .filter(el => !el.hasAttribute('disabled')
+      && el.getAttribute('tabindex') !== '-1'
+      && el.getAttribute('aria-hidden') !== 'true'
+      && (el.offsetParent !== null || el === document.activeElement))
+}
+
+function focusFirstElement() {
+  const [first] = tabbableElements()
+  if (first) first.focus()
+  else panelRef.value?.focus()
+}
+
+function trapTab(event: KeyboardEvent) {
+  const elements = tabbableElements()
+  if (elements.length === 0) {
+    event.preventDefault()
+    panelRef.value?.focus()
+    return
+  }
+
+  const first = elements[0]!
+  const last = elements[elements.length - 1]!
+  const active = document.activeElement as HTMLElement | null
+
+  if (event.shiftKey && (active === first || !panelRef.value?.contains(active))) {
+    event.preventDefault()
+    last.focus()
+    return
+  }
+
+  if (!event.shiftKey && (active === last || !panelRef.value?.contains(active))) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+async function captureAndFocus() {
+  previouslyFocused = document.activeElement as HTMLElement | null
+  await nextTick()
+  focusFirstElement()
+}
+
+watch(() => props.modelValue, (open) => {
+  if (!import.meta.client) return
+
+  if (open) {
+    captureAndFocus()
+    return
+  }
+
+  previouslyFocused?.focus?.()
+  previouslyFocused = null
+})
+
 let backdropMousedownOnSelf = false
 
-if (import.meta.client) {
-  watch(() => props.modelValue, (isOpen) => {
-    if (isOpen === isLockedByThisInstance) return
-    isLockedByThisInstance = isOpen
-    if (isOpen) lockBodyScroll()
-    else unlockBodyScroll()
-  }, { immediate: true })
-}
+useBodyScrollLock(toRef(props, 'modelValue'))
 
 function close() {
   emit('update:modelValue', false)
@@ -128,19 +152,23 @@ function handleBackdropClick() {
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  if (!props.closeOnEscape || !props.modelValue || event.key !== 'Escape') return
+  if (!props.modelValue) return
+
+  if (event.key === 'Tab') {
+    trapTab(event)
+    return
+  }
+
+  if (!props.closeOnEscape || event.key !== 'Escape') return
   close()
 }
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
+  if (props.modelValue) captureAndFocus()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
-  if (isLockedByThisInstance) {
-    isLockedByThisInstance = false
-    unlockBodyScroll()
-  }
 })
 </script>

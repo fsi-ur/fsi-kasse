@@ -22,7 +22,7 @@
     <template #cell-is_active="{ item }">
       <CommonStatusBadge
         :label="item.is_active ? t('common.active') : t('common.inactive')"
-        :tone="item.is_active ? 'green' : 'gray'"
+        :tone="item.is_active ? 'success' : 'baseMuted'"
       />
     </template>
 
@@ -38,19 +38,19 @@
         </div>
       </div>
 
-      <p class="text-sm text-slate-600">{{ t('items.priceChangeNotice') }}</p>
+      <p class="text-sm text-base-600">{{ t('items.priceChangeNotice') }}</p>
 
-      <div v-if="!isNewItem && priceHistory.length > 0" class="rounded-lg border border-slate-200 p-3">
+      <div v-if="!isNewItem && priceHistory.length > 0" class="rounded-lg border border-base-200 p-3">
         <h4 class="font-semibold text-sm mb-2">{{ t('items.priceHistory') }}</h4>
         <ul
-          class="text-xs text-slate-600"
+          class="text-xs text-base-600"
           :class="priceHistoryScrolls ? 'price-history-scroll pr-2' : ''"
           :style="priceHistoryScrolls ? { maxHeight: `${PRICE_HISTORY_ROW_REM * PRICE_HISTORY_VISIBLE_LIMIT}rem`, overflowY: 'auto' } : {}"
         >
           <li
             v-for="entry in priceHistory"
             :key="entry.valid_from + entry.price"
-            class="flex justify-between items-center gap-4 border-b border-slate-100 last:border-b-0"
+            class="flex justify-between items-center gap-4 border-b border-base-100 last:border-b-0"
             :style="{ height: `${PRICE_HISTORY_ROW_REM}rem` }"
           >
             <span>{{ formatDateTime(entry.valid_from) }}</span>
@@ -156,7 +156,7 @@ onMounted(() => {
    OS/browser auto-hide/overlay scrollbar behavior. */
 .price-history-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #94a3b8 #f1f5f9; /* slate-400 / slate-100 */
+  scrollbar-color: var(--color-base-400) var(--color-base-100);
 }
 
 .price-history-scroll::-webkit-scrollbar {
@@ -164,12 +164,12 @@ onMounted(() => {
 }
 
 .price-history-scroll::-webkit-scrollbar-track {
-  background: #f1f5f9; /* slate-100 */
+  background: var(--color-base-100);
   border-radius: 9999px;
 }
 
 .price-history-scroll::-webkit-scrollbar-thumb {
-  background-color: #94a3b8; /* slate-400 */
+  background-color: var(--color-base-400);
   border-radius: 9999px;
 }
 </style>

@@ -14,12 +14,12 @@
         <div
           v-if="open"
           ref="menuRef"
-          class="absolute z-100 rounded-lg border border-slate-200 bg-white p-1 shadow-xl ring-1 ring-slate-900/5 max-h-50 overflow-y-auto"
+          class="absolute z-100 rounded-lg border border-base-200 bg-white p-1 shadow-xl ring-1 ring-base-900/5 max-h-50 overflow-y-auto"
           :style="dropdownStyle"
           @mousedown.stop
           @click.stop
         >
-          <slot styling="flex w-full items-center gap-2 text-left px-3 py-2 text-sm transition hover:bg-slate-100 rounded-md cursor-pointer whitespace-nowrap" />
+          <slot styling="flex w-full items-center gap-2 text-left px-3 py-2 text-sm transition hover:bg-base-100 rounded-md cursor-pointer whitespace-nowrap" />
         </div>
       </transition>
     </teleport>

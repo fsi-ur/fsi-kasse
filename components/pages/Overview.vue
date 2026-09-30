@@ -5,7 +5,7 @@
     </template>
 
     <template #cards>
-      <div v-if="!selectedEvent" class="col-span-12 text-gray-500">
+      <div v-if="!selectedEvent" class="col-span-12 text-base-500">
         {{ t('overview.selectEvent') }}
       </div>
 
@@ -17,7 +17,7 @@
             <li
               v-for="i in data.regular.items"
               :key="i.id"
-              class="grid grid-cols-[minmax(0,1fr)_auto_5rem] gap-4 border-b border-slate-200 py-1"
+              class="grid grid-cols-[minmax(0,1fr)_auto_5rem] gap-4 border-b border-base-200 py-1"
             >
               <span class="truncate">{{ i.name }}</span>
               <span class="text-right">{{ i.quantity }} {{ t('overview.pcs') }}</span>
@@ -37,7 +37,7 @@
             <li
               v-for="i in data.fachschaft.items"
               :key="i.id"
-              class="grid grid-cols-[minmax(0,1fr)_auto_5rem] gap-4 border-b border-slate-200 py-1"
+              class="grid grid-cols-[minmax(0,1fr)_auto_5rem] gap-4 border-b border-base-200 py-1"
             >
               <span class="truncate">{{ i.name }}</span>
               <span class="text-right">{{ i.quantity }} {{ t('overview.pcs') }}</span>
@@ -63,10 +63,10 @@
             <span>{{ formatCurrency(Number(data.payments.revenue)) }}</span>
           </div>
 
-          <div v-if="paymentAmounts.length > 1" class="mt-2 text-sm text-slate-500">
+          <div v-if="paymentAmounts.length > 1" class="mt-2 text-sm text-base-500">
             {{ t('overview.mixedPaymentAmounts') }}
           </div>
-          <div v-else-if="paymentAmounts.length === 1" class="mt-2 text-sm text-slate-500">
+          <div v-else-if="paymentAmounts.length === 1" class="mt-2 text-sm text-base-500">
             {{ t('overview.paymentAmountEach', { amount: formatCurrency(paymentAmounts[0]?.amount ?? 0) }) }}
           </div>
         </div>
@@ -79,7 +79,7 @@
             <span>{{ data.donations.count }}</span>
           </div>
 
-          <div class="flex justify-between font-bold text-orange-600">
+          <div class="flex justify-between font-bold text-accent-600">
             <span>{{ t('overview.donationTotal') }}</span>
             <span>{{ formatCurrency(data.donations.total) }}</span>
           </div>
@@ -87,10 +87,10 @@
 
         <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
           <h2 class="text-lg font-semibold mb-2">{{ t('overview.totalIncome') }}</h2>
-          <div class="text-3xl font-bold text-orange-600">
+          <div class="text-3xl font-bold text-accent-600">
             {{ formatCurrency(data.regular.totalRevenue + data.payments.revenue + data.donations.total) }}
           </div>
-          <div class="mt-1 text-sm text-slate-500">
+          <div class="mt-1 text-sm text-base-500">
             {{ t('overview.totalIncomeBreakdown', {
               sales: formatCurrency(data.regular.totalRevenue),
               payments: formatCurrency(data.payments.revenue),
@@ -107,7 +107,7 @@
             <span>
               {{ formatCurrency(data.lastHour.revenue) }}
               <span
-                :class="data.lastHour.diffRevenue >= 0 ? 'text-green-600' : 'text-red-600'"
+                :class="data.lastHour.diffRevenue >= 0 ? 'text-success-600' : 'text-danger-600'"
               >
                 ({{ formatCurrency(data.lastHour.diffRevenue, { signDisplay: 'exceptZero' }) }})
               </span>
@@ -119,7 +119,7 @@
             <span>
               {{ data.lastHour.quantity }}
               <span
-                :class="data.lastHour.diffQuantity >= 0 ? 'text-green-600' : 'text-red-600'"
+                :class="data.lastHour.diffQuantity >= 0 ? 'text-success-600' : 'text-danger-600'"
               >
                 ({{ data.lastHour.diffQuantity >= 0 ? '+' : '' }}{{ data.lastHour.diffQuantity }})
               </span>
@@ -130,7 +130,7 @@
         <div class="col-span-12 bg-white p-4 rounded-xl shadow-lg">
           <h2 class="text-lg font-semibold mb-4">{{ t('overview.hourlySales') }}</h2>
 
-          <div v-if="hourlyBars.length === 0" class="text-gray-400">
+          <div v-if="hourlyBars.length === 0" class="text-base-400">
             {{ t('overview.noHourlySales') }}
           </div>
 
@@ -142,15 +142,15 @@
                 class="flex flex-col items-center flex-1 min-w-14"
                 :title="`${entry.revenueLabel} — ${entry.quantity} ${t('overview.pcs')}`"
               >
-                <span class="text-xs text-slate-600 mb-1 whitespace-nowrap">{{ entry.revenueLabel }}</span>
+                <span class="text-xs text-base-600 mb-1 whitespace-nowrap">{{ entry.revenueLabel }}</span>
                 <div
-                  class="w-full rounded-t-md bg-orange-500"
+                  class="w-full rounded-t-md bg-accent-500"
                   :style="{ height: `${entry.height}px` }"
                 ></div>
-                <span class="text-xs text-slate-500 mt-1 whitespace-nowrap border-t border-slate-300 w-full text-center pt-1">
+                <span class="text-xs text-base-500 mt-1 whitespace-nowrap border-t border-base-300 w-full text-center pt-1">
                   {{ entry.hourLabel }}
                 </span>
-                <span class="text-xs text-slate-400 whitespace-nowrap h-4">
+                <span class="text-xs text-base-400 whitespace-nowrap h-4">
                   {{ entry.dayLabel }}
                 </span>
               </div>
@@ -159,7 +159,7 @@
         </div>
       </template>
 
-      <div v-else-if="loading" class="col-span-12 text-gray-500">
+      <div v-else-if="loading" class="col-span-12 text-base-500">
         {{ t('common.loading') }}
       </div>
     </template>
@@ -250,7 +250,7 @@ onRefresh(loadOverview)
    chart scrolls once an event has more hourly bars than fit on screen. */
 .hourly-chart-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #94a3b8 #f1f5f9; /* slate-400 / slate-100 */
+  scrollbar-color: var(--color-base-400) var(--color-base-100);
 }
 
 .hourly-chart-scroll::-webkit-scrollbar {
@@ -265,14 +265,14 @@ onRefresh(loadOverview)
    transparent border + padding-box clip, or its rounded ends get clipped away. */
 .hourly-chart-scroll::-webkit-scrollbar-track,
 .hourly-chart-scroll::-webkit-scrollbar-track-piece {
-  background-color: #f1f5f9; /* slate-100 */
+  background-color: var(--color-base-100);
   border: 1px solid transparent;
   background-clip: padding-box;
   border-radius: 9999px;
 }
 
 .hourly-chart-scroll::-webkit-scrollbar-thumb {
-  background-color: #94a3b8; /* slate-400 */
+  background-color: var(--color-base-400);
   border-radius: 9999px;
 }
 </style>

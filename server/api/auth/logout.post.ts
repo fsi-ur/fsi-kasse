@@ -1,5 +1,5 @@
-import { defineEventHandler, getCookie, setCookie, readBody } from 'h3'
-import { deleteSessionByToken } from '~/server/utils/auth'
+import { defineEventHandler, getCookie, setCookie } from 'h3'
+import { deleteSessionByToken, cleanupExpiredSessions } from '~/server/utils/auth'
 
 export default defineEventHandler(async (event) => {
   const cookieName = process.env.SESSION_COOKIE_NAME || 'app_session'
@@ -13,6 +13,12 @@ export default defineEventHandler(async (event) => {
       path: '/',
       maxAge: 0
     })
+  }
+
+  try {
+    await cleanupExpiredSessions()
+  } catch (err) {
+    console.error('Failed to clean up expired sessions', err)
   }
 
   return { ok: true }

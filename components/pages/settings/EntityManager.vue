@@ -1,7 +1,7 @@
 <template>
   <div
     v-if="readOnly"
-    class="col-span-12 p-4 bg-amber-50 text-amber-900 shadow-lg rounded-xl border border-amber-200 text-sm"
+    class="col-span-12 p-4 bg-warning-50 text-warning-900 shadow-lg rounded-xl border border-warning-200 text-sm"
   >
     {{ readOnlyNotice }}
   </div>
@@ -17,6 +17,7 @@
     @create="addItem"
   >
     <CommonAdvancedTable
+      :loading="loading"
       v-model:search="search"
       :persist-key="persistKey"
       :rows="displayItems"
@@ -49,13 +50,13 @@
           :toggle="() => toggleActive(row)"
           :reload="loadItems"
         >
-          <button v-if="editable" class="text-blue-600 hover:underline cursor-pointer" @click="editItem(row)">
+          <button v-if="editable" class="text-link-600 hover:underline cursor-pointer" @click="editItem(row)">
             {{ t('actions.edit') }}
           </button>
 
           <button
             class="hover:underline cursor-pointer"
-            :class="row.is_active ? 'text-red-500' : 'text-gray-500'"
+            :class="row.is_active ? 'text-danger-500' : 'text-base-500'"
             @click="toggleActive(row)"
           >
             {{ row.is_active ? t('actions.deactivate') : t('actions.activate') }}
@@ -63,7 +64,7 @@
 
           <button
             v-if="deleteEndpoint"
-            class="text-red-600 hover:underline cursor-pointer"
+            class="text-danger-600 hover:underline cursor-pointer"
             @click="itemToDelete = row"
           >
             {{ t('actions.remove') }}
@@ -97,7 +98,7 @@
       <CommonFormActions
         :cancel-label="t('actions.cancel')"
         :submit-label="t('actions.save')"
-        :save-disabled="isSaving"
+        :saving="isSaving"
         @cancel="closeModal"
         @submit="saveItem"
       />
@@ -265,6 +266,7 @@ const showModal = ref(false)
 const editingItem = ref<SaveSettingsEntityBody | null>(null)
 const isNewItem = ref(false)
 const isSaving = ref(false)
+const loading = ref(true)
 const itemToDelete = ref<SettingsEntityRow | null>(null)
 
 function reportError(phase: EntityManagerErrorContext['phase'], message?: string, error?: unknown) {
@@ -287,6 +289,8 @@ async function loadItems() {
     reportError('load', res.error)
   } catch (error) {
     reportError('load', undefined, error)
+  } finally {
+    loading.value = false
   }
 }
 

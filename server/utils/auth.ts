@@ -80,5 +80,6 @@ export async function deleteSessionByToken(token: string) {
 }
 
 export async function cleanupExpiredSessions() {
-  await accountingQuery(`DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at < NOW()`)
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
+  await accountingQuery(`DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at < ?`, [now])
 }

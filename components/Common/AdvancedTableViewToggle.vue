@@ -1,12 +1,12 @@
 <template>
   <button
     type="button"
-    class="group hidden h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-slate-300 cursor-pointer transition-all duration-150 hover:w-auto hover:justify-start hover:gap-1.5 hover:bg-slate-50 hover:px-3 xl:inline-flex"
+    class="group hidden h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-base-300 cursor-pointer transition-all duration-150 hover:w-auto hover:justify-start hover:gap-1.5 hover:bg-base-50 hover:px-3 xl:inline-flex"
     :title="label"
     @click="viewMode = viewMode === 'table' ? 'compact' : 'table'"
   >
-    <Icon :name="icon" class="w-5 h-5 shrink-0 text-slate-600" />
-    <span class="max-w-0 whitespace-nowrap text-sm text-slate-600 opacity-0 transition-all duration-150 group-hover:max-w-40 group-hover:opacity-100">
+    <Icon :name="icon" class="w-5 h-5 shrink-0 text-base-600" />
+    <span class="max-w-0 whitespace-nowrap text-sm text-base-600 opacity-0 transition-all duration-150 group-hover:max-w-40 group-hover:opacity-100">
       {{ label }}
     </span>
   </button>

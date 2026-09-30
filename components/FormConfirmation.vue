@@ -4,7 +4,7 @@
     :title="headline"
     @close="$emit('cancel')"
   >
-    <p class="text-sm text-slate-600">
+    <p class="text-sm text-base-600">
       <slot name="message"></slot>
     </p>
 

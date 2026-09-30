@@ -32,17 +32,24 @@ export const useAuth = () => {
   }
 
   async function login(username: string, password: string): Promise<LoginResponse> {
-    const res = await $fetch<LoginResponse>('/api/auth/login', {
-      method: 'POST',
-      body: { username, password }
-    })
+    try {
+      const res = await $fetch<LoginResponse>('/api/auth/login', {
+        method: 'POST',
+        body: { username, password }
+      })
 
-    if (res.ok) {
-      await fetchSession()
+      if (res.ok) {
+        await fetchSession()
+        // The server accepted the credentials, but the browser did not keep the session cookie.
+        if (!user.value) {
+          return { ok: false, error: 'Session cookie was not established', code: 'session_not_established' }
+        }
+      }
+
       return res
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Network error', code: 'network_error' }
     }
-
-    return res
   }
 
   async function logout() {

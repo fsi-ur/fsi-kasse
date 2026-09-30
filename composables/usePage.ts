@@ -3,6 +3,8 @@ import type { PageName } from '~/types/page'
 const currentPage = ref<PageName>('Checkout')
 const pageMeta = ref<Record<string, any> | null>(null)
 
+const pendingLoginTarget = ref<{ page: PageName; meta: Record<string, any> | null } | null>(null)
+
 // Only these meta keys are persisted in the URL hash; ephemeral keys like resetTabKey are excluded
 const HASH_META_KEYS = ['tab']
 
@@ -47,13 +49,27 @@ if (import.meta.client) {
 
 export const usePage = () => {
   const setPage = (page: PageName, meta?: Record<string, any>) => {
+    // Remember where the user was when the session got lost, so logging in again returns there
+    if (page === 'Login' && currentPage.value !== 'Login') {
+      pendingLoginTarget.value = { page: currentPage.value, meta: pageMeta.value }
+    }
+
     currentPage.value = page
     pageMeta.value = meta || null
     // Skip hash update for Login so deep links survive auth redirects
     if (import.meta.client && page !== 'Login') {
       window.location.hash = buildHash(page, meta || null)
     }
+    if (import.meta.client) {
+      nextTick(() => window.scrollTo(0, 0))
+    }
   }
 
-  return { currentPage, setPage, pageMeta }
+  function consumePendingLoginTarget() {
+    const target = pendingLoginTarget.value
+    pendingLoginTarget.value = null
+    return target
+  }
+
+  return { currentPage, setPage, pageMeta, consumePendingLoginTarget }
 }

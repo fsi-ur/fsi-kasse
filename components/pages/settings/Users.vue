@@ -1,7 +1,7 @@
 <template>
   <p
     v-if="isConnectedMode"
-    class="col-span-12 -mb-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900"
+    class="col-span-12 -mb-2 rounded-md bg-warning-50 border border-warning-200 px-3 py-2 text-sm text-warning-900"
   >
     {{ t('users.connectedNotice') }}
   </p>
@@ -16,6 +16,7 @@
     @create="showCreateModal = true"
   >
     <CommonAdvancedTable
+      :loading="loading"
       v-model:search="search"
       persist-key="settings-users"
       :rows="users"
@@ -30,7 +31,7 @@
           <CommonStatusBadge
             v-if="row.must_change_password"
             :label="t('users.mustChangePassword')"
-            tone="yellow"
+            tone="warning"
           />
         </span>
       </template>
@@ -38,22 +39,22 @@
       <template #cell-is_active="{ row }">
         <CommonStatusBadge
           :label="row.is_active ? t('common.active') : t('common.inactive')"
-          :tone="row.is_active ? 'green' : 'gray'"
+          :tone="row.is_active ? 'success' : 'baseMuted'"
         />
       </template>
 
       <template #actions="{ row }">
-        <button class="text-blue-600 hover:underline cursor-pointer" @click="openUsernameModal(row)">
+        <button class="text-link-600 hover:underline cursor-pointer" @click="openUsernameModal(row)">
           {{ t('users.changeUsername') }}
         </button>
 
-        <button class="text-blue-600 hover:underline cursor-pointer" @click="openPasswordModal(row)">
+        <button class="text-link-600 hover:underline cursor-pointer" @click="openPasswordModal(row)">
           {{ t('users.setPassword') }}
         </button>
 
         <button
           v-if="!row.must_change_password"
-          class="text-amber-700 hover:underline cursor-pointer"
+          class="text-warning-700 hover:underline cursor-pointer"
           @click="requirePasswordChange(row)"
         >
           {{ t('users.requirePasswordChange') }}
@@ -110,6 +111,7 @@
         :cancel-label="t('actions.cancel')"
         :submit-label="t('users.create')"
         :save-disabled="isConnectedMode || !newUsername || !newPassword"
+        :saving="isSavingUser"
         @cancel="showCreateModal = false; resetForm()"
         @submit="registerUser"
       />
@@ -130,7 +132,8 @@
       <CommonFormActions
         :cancel-label="t('actions.cancel')"
         :submit-label="t('actions.save')"
-        :save-disabled="isSavingUser || !usernameForm.trim()"
+        :save-disabled="!usernameForm.trim()"
+        :saving="isSavingUser"
         @cancel="closeUsernameModal"
         @submit="changeUsername"
       />
@@ -142,7 +145,7 @@
     :title="t('users.setPasswordTitle', { name: editedUser?.username })"
     @close="closePasswordModal"
   >
-    <p class="text-sm text-slate-600">{{ t('users.setPasswordText') }}</p>
+    <p class="text-sm text-base-600">{{ t('users.setPasswordText') }}</p>
 
     <div class="grid gap-4">
       <div class="field">
@@ -155,14 +158,15 @@
         <input v-model="passwordForm.confirmPassword" type="password" class="input" autocomplete="new-password" :disabled="isSavingUser">
       </div>
 
-      <p class="text-xs text-slate-500">{{ t('settings.passwordHelp', { min: MIN_PASSWORD_LENGTH }) }}</p>
+      <p class="text-xs text-base-500">{{ t('settings.passwordHelp', { min: MIN_PASSWORD_LENGTH }) }}</p>
     </div>
 
     <template #footer>
       <CommonFormActions
         :cancel-label="t('actions.cancel')"
         :submit-label="t('actions.save')"
-        :save-disabled="isSavingUser || !passwordForm.newPassword || !passwordForm.confirmPassword"
+        :save-disabled="!passwordForm.newPassword || !passwordForm.confirmPassword"
+        :saving="isSavingUser"
         @cancel="closePasswordModal"
         @submit="setPassword"
       />
@@ -185,6 +189,7 @@ const runtimeConfig = useRuntimeConfig()
 const isConnectedMode = runtimeConfig.public.accountingMode === 'connected'
 
 const users = ref<any[]>([])
+const loading = ref(true)
 const search = ref('')
 const showCreateModal = ref(false)
 const newUsername = ref('')
@@ -247,34 +252,45 @@ const columns: AdvancedTableColumn<any>[] = [
 ]
 
 async function loadUsers() {
-  const res = await $fetch('/api/auth/users')
-  if (res.ok) {
-    users.value = 'users' in res ? res.users as any[] : []
+  try {
+    const res = await $fetch('/api/auth/users')
+    if (res.ok) {
+      users.value = 'users' in res ? res.users as any[] : []
+    }
+  } finally {
+    loading.value = false
   }
 }
 
 async function registerUser() {
-  if (isConnectedMode) return
+  if (isConnectedMode || isSavingUser.value) return
 
-  const res = await $fetch('/api/auth/register', {
-    method: 'POST',
-    body: {
-      username: newUsername.value,
-      password: newPassword.value,
-      role: role.value
+  isSavingUser.value = true
+  try {
+    const res = await $fetch('/api/auth/register', {
+      method: 'POST',
+      body: {
+        username: newUsername.value,
+        password: newPassword.value,
+        role: role.value
+      }
+    })
+
+    if (!res.ok) {
+      toast.error('error' in res && res.error ? String(res.error) : t('common.unknownError'))
+      return
     }
-  })
 
-  if (!res.ok) {
-    toast.error('error' in res && res.error ? String(res.error) : t('common.unknownError'))
-    return
+    toast.success(t('users.created'))
+    showCreateModal.value = false
+    resetForm()
+
+    await loadUsers()
+  } catch {
+    toast.error(t('common.unknownError'))
+  } finally {
+    isSavingUser.value = false
   }
-
-  toast.success(t('users.created'))
-  showCreateModal.value = false
-  resetForm()
-
-  await loadUsers()
 }
 
 function translateUserError(error?: string) {

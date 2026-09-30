@@ -41,6 +41,11 @@ export interface RangeColumnFilter {
 
 export type ColumnFilter = TextColumnFilter | RangeColumnFilter
 
+export interface TextFilterOption {
+  value: string
+  count: number
+}
+
 function normalizeText(value: unknown): string {
   if (value === null || value === undefined) return ''
   return String(value).trim().toLocaleLowerCase('de-DE')
@@ -112,6 +117,14 @@ function defaultFilters<T, K extends string>(columns: TableColumnConfig<T, K>[])
 }
 
 export type AdvancedTableViewMode = 'table' | 'compact'
+export type AdvancedTablePageSize = 10 | 25 | 50 | 100 | 'all'
+
+export const ADVANCED_TABLE_PAGE_SIZE_OPTIONS: AdvancedTablePageSize[] = [10, 25, 50, 100, 'all']
+const DEFAULT_PAGE_SIZE: AdvancedTablePageSize = 25
+
+export function useAdvancedTablePageSize() {
+  return useState<AdvancedTablePageSize>('table:pageSize', () => DEFAULT_PAGE_SIZE)
+}
 
 /**
  * Shared between `CommonAdvancedTable` and `CommonAdvancedTableViewToggle`, which usually live in
@@ -138,6 +151,8 @@ export function useAdvancedTable<T, K extends string>(
   const sortDirection = persistKey ? useState<SortDirection>(`table:${persistKey}:sortDirection`, () => null) : ref<SortDirection>(null)
   const globalSearchInput = persistKey ? useState<string>(`table:${persistKey}:search`, () => '') : ref('')
   const globalSearchTerm = ref('')
+  const pageSize = useAdvancedTablePageSize()
+  const page = persistKey ? useState<number>(`table:${persistKey}:page`, () => 1) : ref(1)
 
   const columnByKey = computed(() => {
     return columns.reduce<Record<string, TableColumnConfig<T, K>>>((acc, column) => {
@@ -150,17 +165,35 @@ export function useAdvancedTable<T, K extends string>(
     ? useState<Record<string, ColumnFilter>>(`table:${persistKey}:filters`, () => defaultFilters(columns))
     : ref<Record<string, ColumnFilter>>(defaultFilters(columns))
 
-  const textOptionsByColumn = computed<Record<string, string[]>>(() => {
-    const result: Record<string, string[]> = {}
+  const textOptionsByColumn = computed<Record<string, TextFilterOption[]>>(() => {
+    const result: Record<string, TextFilterOption[]> = {}
     for (const column of columns) {
       if (column.filterable === false || (column.filterType ?? 'text') !== 'text') continue
-      const values = new Set<string>()
+      const counts = new Map<string, number>()
       for (const row of rows.value) {
         const value = column.getValue(row)
         const text = value === null || value === undefined || value === '' ? '-' : String(value)
-        values.add(text)
+        counts.set(text, (counts.get(text) ?? 0) + 1)
       }
-      result[column.key] = Array.from(values).sort((a, b) => a.localeCompare(b, 'de-DE'))
+      result[column.key] = Array.from(counts, ([value, count]) => ({ value, count }))
+        .sort((a, b) => a.value.localeCompare(b.value, 'de-DE'))
+    }
+    return result
+  })
+
+  const numberBoundsByColumn = computed<Record<string, { min: number, max: number } | null>>(() => {
+    const result: Record<string, { min: number, max: number } | null> = {}
+    for (const column of columns) {
+      if (column.filterable === false || column.filterType !== 'number') continue
+      let min: number | null = null
+      let max: number | null = null
+      for (const row of rows.value) {
+        const comparable = toComparableValue('number', column.getValue(row))
+        if (typeof comparable !== 'number') continue
+        if (min === null || comparable < min) min = comparable
+        if (max === null || comparable > max) max = comparable
+      }
+      result[column.key] = min === null || max === null ? null : { min, max }
     }
     return result
   })
@@ -231,7 +264,7 @@ export function useAdvancedTable<T, K extends string>(
     globalSearchTerm.value = value.trim()
   })
 
-  const processedRows = computed<T[]>(() => {
+  const sortedRows = computed<T[]>(() => {
     const filtered = rows.value.filter((row) => {
       for (const column of columns) {
         if (column.filterable === false) continue
@@ -298,13 +331,40 @@ export function useAdvancedTable<T, K extends string>(
     return sorted
   })
 
+  const totalCount = computed(() => sortedRows.value.length)
+
+  const totalPages = computed(() => {
+    if (pageSize.value === 'all') return 1
+    return Math.max(1, Math.ceil(totalCount.value / pageSize.value))
+  })
+
+  watch([filters, globalSearchTerm, pageSize], () => {
+    page.value = 1
+  }, { deep: true })
+
+  watch([totalPages, page], ([currentTotalPages, currentPage]) => {
+    if (currentPage > currentTotalPages) page.value = currentTotalPages
+    else if (currentPage < 1) page.value = 1
+  })
+
+  const processedRows = computed<T[]>(() => {
+    if (pageSize.value === 'all') return sortedRows.value
+    const start = (page.value - 1) * pageSize.value
+    return sortedRows.value.slice(start, start + pageSize.value)
+  })
+
   return {
     sortKey,
     sortDirection,
     filters,
     textOptionsByColumn,
+    numberBoundsByColumn,
     globalSearchInput,
     globalSearchTerm,
+    page,
+    pageSize,
+    totalCount,
+    totalPages,
     processedRows,
     getFilter,
     isFilterActive,

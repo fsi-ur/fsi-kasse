@@ -14,13 +14,13 @@
         {{ badgeLabel }}
       </div>
 
-      <p class="min-w-0 flex-1 text-sm font-medium text-slate-800">
+      <p class="min-w-0 flex-1 text-sm font-medium text-base-800">
         {{ toast.message }}
       </p>
 
       <button
         type="button"
-        class="rounded-full h-6 w-6 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 cursor-pointer flex items-center justify-center"
+        class="rounded-full h-6 w-6 text-base-400 transition hover:bg-base-200 hover:text-base-700 cursor-pointer flex items-center justify-center"
         :aria-label="closeLabel"
         @click="close"
       >
@@ -28,7 +28,7 @@
       </button>
     </div>
 
-    <div class="mt-3 h-1 overflow-hidden rounded-full bg-slate-200/80">
+    <div class="mt-3 h-1 overflow-hidden rounded-full bg-base-200/80">
       <div class="h-full rounded-full transition-[width] duration-75 ease-linear" :class="progressClass" :style="{ width: `${progressPercent}%` }" />
     </div>
   </article>
@@ -56,21 +56,21 @@ const progressPercent = computed(() => {
 })
 
 const containerClass = computed(() => {
-  if (props.toast.type === 'success') return 'border-emerald-200'
-  if (props.toast.type === 'error') return 'border-rose-200'
-  return 'border-slate-200'
+  if (props.toast.type === 'success') return 'border-success-200'
+  if (props.toast.type === 'error') return 'border-danger-200'
+  return 'border-base-200'
 })
 
 const badgeClass = computed(() => {
-  if (props.toast.type === 'success') return 'bg-emerald-100 text-emerald-700'
-  if (props.toast.type === 'error') return 'bg-rose-100 text-rose-700'
-  return 'bg-slate-100 text-slate-700'
+  if (props.toast.type === 'success') return 'bg-success-100 text-success-700'
+  if (props.toast.type === 'error') return 'bg-danger-100 text-danger-700'
+  return 'bg-base-100 text-base-700'
 })
 
 const progressClass = computed(() => {
-  if (props.toast.type === 'success') return 'bg-emerald-500'
-  if (props.toast.type === 'error') return 'bg-rose-500'
-  return 'bg-slate-500'
+  if (props.toast.type === 'success') return 'bg-success-500'
+  if (props.toast.type === 'error') return 'bg-danger-500'
+  return 'bg-base-500'
 })
 
 const badgeLabel = computed(() => {

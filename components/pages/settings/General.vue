@@ -1,9 +1,9 @@
 <template>
   <div class="bg-white rounded-xl shadow-lg p-6 space-y-6 col-span-12">
-    <section class="rounded-xl border border-slate-200 p-4 space-y-3">
+    <section class="rounded-xl border border-base-200 p-4 space-y-3">
       <div>
         <h3 class="font-semibold">{{ t('settings.languageTitle') }}</h3>
-        <p class="text-sm text-slate-600">
+        <p class="text-sm text-base-600">
           {{ t('settings.languageText', { language: t(`language.${language === 'de' ? 'german' : 'english'}`) }) }}
         </p>
       </div>
@@ -13,10 +13,10 @@
       </button>
     </section>
 
-    <section class="rounded-xl border border-slate-200 p-4 space-y-3">
+    <section class="rounded-xl border border-base-200 p-4 space-y-3">
       <div>
         <h3 class="font-semibold">{{ t('settings.passwordTitle') }}</h3>
-        <p class="text-sm text-slate-600">
+        <p class="text-sm text-base-600">
           {{ isConnectedMode ? t('settings.credentialsConnectedNotice') : t('settings.passwordText') }}
         </p>
       </div>
@@ -26,10 +26,10 @@
       </button>
     </section>
 
-    <section class="rounded-xl border border-slate-200 p-4 space-y-3">
+    <section class="rounded-xl border border-base-200 p-4 space-y-3">
       <div>
         <h3 class="font-semibold">{{ t('settings.logoutTitle') }}</h3>
-        <p class="text-sm text-slate-600">{{ t('settings.logoutText') }}</p>
+        <p class="text-sm text-base-600">{{ t('settings.logoutText') }}</p>
       </div>
 
       <div class="flex flex-col gap-3 sm:flex-row">
@@ -51,7 +51,7 @@
   </div>
 
   <CommonModal v-model="showPasswordModal" :title="t('settings.passwordTitle')" @close="closePasswordModal">
-    <p class="text-sm text-slate-600">{{ t('settings.passwordSessionText') }}</p>
+    <p class="text-sm text-base-600">{{ t('settings.passwordSessionText') }}</p>
 
     <form class="grid gap-4" @submit.prevent="changePassword">
       <div class="field">
@@ -90,14 +90,15 @@
         >
       </div>
 
-      <p class="text-xs text-slate-500">{{ t('settings.passwordHelp', { min: MIN_PASSWORD_LENGTH }) }}</p>
+      <p class="text-xs text-base-500">{{ t('settings.passwordHelp', { min: MIN_PASSWORD_LENGTH }) }}</p>
     </form>
 
     <template #footer>
       <CommonFormActions
         :cancel-label="t('actions.cancel')"
-        :submit-label="isChangingPassword ? t('settings.passwordSaving') : t('settings.passwordSave')"
-        :save-disabled="isChangingPassword"
+        :submit-label="t('settings.passwordSave')"
+        :saving="isChangingPassword"
+        :saving-label="t('settings.passwordSaving')"
         @cancel="closePasswordModal"
         @submit="changePassword"
       />

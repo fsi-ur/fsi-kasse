@@ -1,7 +1,7 @@
 <template>
   <section
     v-if="errors.length"
-    class="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700"
+    class="bg-danger-50 border border-danger-200 rounded-xl p-3 text-sm text-danger-700"
   >
     <p class="font-semibold mb-1">{{ title }}</p>
     <ul class="list-disc list-inside">
