@@ -8,6 +8,8 @@
     </template>
 
     <template #cards>
+      <CommonOfflineNotice v-if="itemsUnavailable" variant="noData" />
+
       <div class="col-span-12 lg:col-span-6 xl:col-span-8 bg-white p-4 rounded-xl shadow-lg">
         <h2 class="text-lg font-semibold mb-4">{{ t('checkout.items') }}</h2>
         <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -180,24 +182,30 @@ import { useI18n } from '~/composables/useI18n'
 import { useToast } from '~/composables/useToast'
 import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
 import { sanitizeCurrencyInput, parseCurrencyInput, focusAndSelectInput } from '~/composables/useCurrencyInput'
+import { cachedFetch } from '~/composables/useCachedFetch'
+import { onOfflineDataChanged, useOfflineQueue, type CheckoutPayload } from '~/composables/useOfflineQueue'
+import { createClientUuid } from '~/utils/network'
 
 const items = ref<any[]>([])
+const itemsUnavailable = ref(false)
 const showConfirm = ref(false)
 
 const emit = defineEmits<{
   (e: 'openMenu'): void
 }>()
 
-const { selectedCashier, selectedEvent, orderItems, isFachschaft } = useCheckout()
+const {
+  selectedCashier, selectedEvent, selectedCashierName, selectedEventName, orderItems, isFachschaft,
+  donationMode, directDonation: directAmount, paidAmount,
+} = useCheckout()
 const { t } = useI18n()
 const { formatCurrency } = useLocaleFormatters()
 const toast = useToast()
 const { onRefresh } = useAppRefresh()
+const { submit } = useOfflineQueue()
 
-const donationMode = ref<'direct' | 'paid' | null>(null)
 
 // direct donation input state
-const directAmount = ref(0)
 const directRaw = ref('')
 const directFocused = ref(false)
 const directDisplayValue = computed(() =>
@@ -222,7 +230,6 @@ function onDirectBlur() {
 }
 
 // paid-amount input state
-const paidAmount = ref(0)
 const paidRaw = ref('')
 const paidFocused = ref(false)
 const paidDisplayValue = computed(() =>
@@ -276,16 +283,30 @@ function setDonationMode(mode: 'direct' | 'paid' | null) {
   paidFocused.value = false
 }
 
+watch([() => orderItems.value.length, isFachschaft], ([count, fachschaft]) => {
+  if (donationMode.value === 'paid' && (count === 0 || fachschaft)) setDonationMode(null)
+}, { immediate: true })
+
 async function loadItems() {
-  const res = await $fetch('/api/items', { method: 'GET' })
+  let result
+  try {
+    result = await cachedFetch<any>('/api/items')
+  } catch {
+    itemsUnavailable.value = items.value.length === 0
+    return
+  }
+
+  itemsUnavailable.value = false
+  const res = result.data
   if (res.ok) {
     const allItems = 'items' in res ? res.items as any[] : []
     items.value = allItems.filter(i => i.is_active === 1 || i.is_active === true)
-    reconcileCart()
+
+    if (!result.stale) reconcileCart()
   }
 }
 
-// The cart survives page switches, so an admin price change or deactivation can
+// The cart survives page switches and reloads, so an admin price change or deactivation can
 // leave it stale. Bring it back in line with what the server would actually book.
 function reconcileCart() {
   const available = new Map(items.value.map(item => [item.id, item]))
@@ -318,6 +339,7 @@ function reconcileCart() {
 
 onMounted(loadItems)
 onRefresh(loadItems)
+onOfflineDataChanged(loadItems)
 
 function addToOrder(item: any) {
   const existing = orderItems.value.find((it) => it.id === item.id)
@@ -344,58 +366,62 @@ function removeLine(id: number) {
 async function finishOrder() {
   showConfirm.value = false
 
-  let orderId: number | null = null
-  let bookedTotal: number | null = null
+  const donation: CheckoutPayload['donation'] = donationMode.value === 'direct' && directAmount.value > 0
+    ? { mode: 'direct', amount: directAmount.value }
+    : donationMode.value === 'paid' && paidAmount.value > 0
+      ? { mode: 'paid', paid_amount: paidAmount.value }
+      : null
 
-  if (orderItems.value.length > 0) {
-    const res = await $fetch('/api/orders/create', {
-      method: 'POST',
-      body: {
-        cashier_id: selectedCashier.value,
-        event_id: selectedEvent.value,
-        items: orderItems.value.map(line => ({ id: line.id, quantity: line.quantity })),
-        is_fachschaft: isFachschaft.value
-      }
-    })
-
-    if (!res.ok) {
-      toast.error('error' in res && res.error ? String(res.error) : t('checkout.saveFailed'))
-      return
-    }
-
-    orderId = 'order_id' in res ? Number(res.order_id) : null
-    bookedTotal = 'total' in res ? Number(res.total) : null
+  const payload: CheckoutPayload = {
+    client_uuid: createClientUuid(),
+    cashier_id: Number(selectedCashier.value),
+    event_id: Number(selectedEvent.value),
+    is_fachschaft: isFachschaft.value,
+    items: orderItems.value.map(line => ({
+      id: line.id,
+      quantity: line.quantity,
+      unit_price: Number(line.price),
+      unit_deposit: Number(line.deposit ?? 0),
+    })),
+    donation,
   }
 
-  // The server-side total is authoritative: a price change between adding the
-  // item and submitting must not turn into a wrong (or negative) donation.
-  const donationTotal = bookedTotal ?? total.value
-  const donationAmount = donationMode.value === 'paid'
-    ? Math.max(0, Math.round((paidAmount.value - donationTotal) * 100) / 100)
-    : effectiveDonation.value
-
-  if (donationAmount > 0) {
-    const donRes = await $fetch('/api/donations/create', {
-      method: 'POST',
-      body: {
-        cashier_id: selectedCashier.value,
-        event_id: selectedEvent.value,
-        amount: donationAmount,
-        order_id: orderId
-      }
-    })
-
-    if (!donRes.ok) {
-      toast.error('error' in donRes && donRes.error ? String(donRes.error) : t('checkout.donationSaveFailed'))
-      return
-    }
+  const summaryParts = orderItems.value.map(line => `${line.quantity}× ${line.name}`)
+  if (effectiveDonation.value > 0) {
+    summaryParts.push(`${t('checkout.donationLabel')} ${formatCurrency(effectiveDonation.value)}`)
   }
 
-  const totalMismatch = bookedTotal !== null && Math.abs(bookedTotal - total.value) >= 0.005
+  const localTotal = total.value
+
+  let outcome
+  try {
+    outcome = await submit('checkout', payload, {
+      cashierName: selectedCashierName.value,
+      eventName: selectedEventName.value,
+      summary: summaryParts.join(', '),
+      localTotal,
+    })
+  } catch {
+    toast.error(t('common.unknownError'))
+    return
+  }
+
+  if (outcome.status === 'rejected') {
+    toast.error(outcome.error ?? t('checkout.saveFailed'))
+    return
+  }
 
   orderItems.value = []
   isFachschaft.value = false
   setDonationMode(null)
+
+  if (outcome.status === 'queued') {
+    toast.info(t('offline.savedOffline'))
+    return
+  }
+
+  const bookedTotal = payload.items.length > 0 ? Number(outcome.result.total) : null
+  const totalMismatch = bookedTotal !== null && Math.abs(bookedTotal - localTotal) >= 0.005
 
   toast.success(totalMismatch
     ? t('checkout.savedWithTotal', { total: formatCurrency(bookedTotal!) })

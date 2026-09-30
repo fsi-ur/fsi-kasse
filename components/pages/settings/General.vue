@@ -21,9 +21,10 @@
         </p>
       </div>
 
-      <button class="btn-secondary" :disabled="isConnectedMode" @click="openPasswordModal">
+      <button class="btn-secondary" :disabled="isConnectedMode || !isOnline" @click="openPasswordModal">
         {{ t('settings.passwordOpen') }}
       </button>
+      <p v-if="!isOnline && !isConnectedMode" class="text-xs text-warning-700">{{ t('offline.actionUnavailable') }}</p>
     </section>
 
     <section class="rounded-xl border border-base-200 p-4 space-y-3">
@@ -33,20 +34,21 @@
       </div>
 
       <div class="flex flex-col gap-3 sm:flex-row">
-        <button class="btn-primary" @click="showLogoutConfirm = true">
+        <button class="btn-primary" :disabled="!isOnline" @click="showLogoutConfirm = true">
           {{ t('actions.logout') }}
         </button>
 
         <button
           v-if="!isConnectedMode"
           class="btn-secondary"
-          :disabled="isLoggingOutAll"
+          :disabled="isLoggingOutAll || !isOnline"
           :class="{ 'opacity-50 cursor-not-allowed': isLoggingOutAll }"
           @click="showLogoutAllConfirm = true"
         >
           {{ isLoggingOutAll ? t('settings.logoutAllLoading') : t('settings.logoutAll') }}
         </button>
       </div>
+      <p v-if="!isOnline" class="text-xs text-warning-700">{{ t('offline.actionUnavailable') }}</p>
     </section>
   </div>
 
@@ -133,10 +135,12 @@ import { useI18n } from '~/composables/useI18n'
 import { useToast } from '~/composables/useToast'
 import { useChangePassword } from '~/composables/useChangePassword'
 import { MIN_PASSWORD_LENGTH } from '~/config/validation'
+import { useConnectivity } from '~/composables/useConnectivity'
 import type { LogoutAllResponse } from '~/server/api/auth/logout-all.post'
 
 const { setPage } = usePage()
 const { logout, redirectToLogin } = useAuth()
+const { isOnline } = useConnectivity()
 const { t, language, toggleLanguage } = useI18n()
 const toast = useToast()
 const { isChangingPassword, passwordForm, resetPasswordForm, submitPasswordChange } = useChangePassword()

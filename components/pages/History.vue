@@ -5,7 +5,10 @@
     </template>
 
     <template #cards>
+      <CommonOfflineNotice v-if="stale" :variant="cachedAt ? 'stale' : 'noData'" :cached-at="cachedAt" />
+
       <CommonPageTableCard
+        v-if="!stale || cachedAt"
         :title="t('history.title')"
         persist-key="history-orders"
         :search-value="search"
@@ -90,6 +93,8 @@ import { useI18n } from '~/composables/useI18n'
 import { useAppRefresh } from '~/composables/useAppRefresh'
 import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
 import type { AdvancedTableColumn } from '~/composables/useAdvancedTable'
+import { cachedFetch } from '~/composables/useCachedFetch'
+import { onOfflineDataChanged } from '~/composables/useOfflineQueue'
 
 const { selectedEvent } = useCheckout()
 const { t } = useI18n()
@@ -105,6 +110,8 @@ const loading = ref(true)
 const search = ref('')
 const showOrderModal = ref(false)
 const openedOrder = ref<any | null>(null)
+const stale = ref(false)
+const cachedAt = ref<number | null>(null)
 
 function orderTotal(order: any) {
   return order.items
@@ -154,8 +161,14 @@ function openOrder(order: any) {
 
 async function loadHistory() {
   try {
-    const res = await $fetch(`/api/orders/history?eventId=${selectedEvent.value}`)
-    if (res.ok) orders.value = 'orders' in res ? res.orders : []
+    const result = await cachedFetch<any>(`/api/orders/history?eventId=${selectedEvent.value}`)
+    stale.value = result.stale
+    cachedAt.value = result.cachedAt
+    if (result.data.ok) orders.value = 'orders' in result.data ? result.data.orders : []
+  } catch {
+    orders.value = []
+    stale.value = true
+    cachedAt.value = null
   } finally {
     loading.value = false
   }
@@ -163,6 +176,7 @@ async function loadHistory() {
 
 onMounted(loadHistory)
 onRefresh(loadHistory)
+onOfflineDataChanged(loadHistory)
 
 watch(selectedEvent, () => {
   loading.value = true

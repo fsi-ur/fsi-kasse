@@ -8,6 +8,8 @@
     </template>
 
     <template #cards>
+      <CommonOfflineNotice v-if="stale" :variant="cachedAt ? 'stale' : 'noData'" :cached-at="cachedAt" />
+
       <div class="col-span-12 p-4 bg-white shadow-lg rounded-xl flex flex-wrap gap-4 items-end">
         <div class="field w-64">
           <label>{{ t('fachschaft.memberName') }}</label>
@@ -39,13 +41,22 @@
         <CommonAdvancedTable
           v-model:search="paymentSearch"
           persist-key="fachschaft-payments"
-          :rows="payments"
+          :rows="paymentRows"
           :loading="paymentsLoading"
           :columns="paymentColumns"
           :empty-text="t('fachschaft.noPayments')"
           :show-actions="false"
           :can-open-row="() => false"
-        />
+        >
+          <template #cell-status="{ row }">
+            <CommonStatusBadge
+              v-if="row.outboxStatus"
+              :label="row.outboxStatus === 'failed' ? t('offline.statusFailed') : t('offline.statusPending')"
+              :tone="row.outboxStatus === 'failed' ? 'danger' : 'warning'"
+            />
+            <span v-else>{{ t('fachschaft.statusBooked') }}</span>
+          </template>
+        </CommonAdvancedTable>
       </CommonPageTableCard>
     </template>
   </Page>
@@ -70,13 +81,19 @@ import type { SearchSelectOption } from '~/components/Common/SearchSelect.vue'
 import { useAppRefresh } from '~/composables/useAppRefresh'
 import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
 import type { AdvancedTableColumn } from '~/composables/useAdvancedTable'
+import { cachedFetch } from '~/composables/useCachedFetch'
+import { onOfflineDataChanged, useOfflineQueue, type FachschaftPayPayload } from '~/composables/useOfflineQueue'
+import { createClientUuid } from '~/utils/network'
+import { positiveIdOrEmpty, usePersistedState } from '~/composables/usePersistedState'
 
 const members = ref<any[]>([])
 const payments = ref<any[]>([])
 const paymentsLoading = ref(true)
 const paymentSearch = ref('')
-const selectedMember = ref<number | string>('')
+const selectedMember = usePersistedState<number | string>('fachschaftMember', () => '', positiveIdOrEmpty)
 const memberQuery = ref('')
+const stale = ref(false)
+const cachedAt = ref<number | null>(null)
 
 const showConfirm = ref(false)
 
@@ -84,12 +101,28 @@ const emit = defineEmits<{
   (e: 'openMenu'): void
 }>()
 
-const { selectedCashier, selectedEvent } = useCheckout()
+const { selectedCashier, selectedEvent, selectedCashierName, selectedEventName } = useCheckout()
 const { t } = useI18n()
 const { formatCurrency, formatDateTime } = useLocaleFormatters()
 const toast = useToast()
 const { settings, loadSettings } = useCashRegisterSettings()
 const { onRefresh } = useAppRefresh()
+const { entries: outboxEntries, submit } = useOfflineQueue()
+
+const paymentRows = computed(() => {
+  const queued = outboxEntries.value
+    .filter(entry => entry.kind === 'fachschaft_payment' && Number(entry.payload.event_id) === Number(selectedEvent.value))
+    .map(entry => ({
+      id: `outbox-${entry.client_uuid}`,
+      member: entry.display.summary,
+      cashier: entry.display.cashierName,
+      amount: entry.display.localTotal,
+      created_at: new Date(entry.queued_at).toISOString(),
+      outboxStatus: entry.status,
+    }))
+
+  return [...queued, ...payments.value]
+})
 
 const formattedAmount = computed(() => formatCurrency(settings.value.fachschaft_payment_amount))
 
@@ -139,12 +172,23 @@ const paymentColumns: AdvancedTableColumn<any>[] = [
     getValue: payment => Number(payment.amount),
     format: payment => formatCurrency(Number(payment.amount)),
   },
+  {
+    key: 'status',
+    label: t('fachschaft.status'),
+    filterable: true,
+    getValue: payment => payment.outboxStatus === 'failed'
+      ? t('offline.statusFailed')
+      : payment.outboxStatus === 'pending' ? t('offline.statusPending') : t('fachschaft.statusBooked'),
+  },
 ]
 
 async function loadMembers() {
-  const res = await $fetch('/api/cashiers', { method: 'GET' })
+  const { data: res, stale } = await cachedFetch<any>('/api/cashiers')
   if (res.ok) {
     members.value = 'cashiers' in res ? res.cashiers as any[] : []
+
+    const stillSelectable = memberOptions.value.some(option => option.value === selectedMember.value)
+    if (!stale && selectedMember.value && !stillSelectable) selectedMember.value = ''
   }
 }
 
@@ -158,6 +202,7 @@ async function reload() {
 
 onMounted(reload)
 onRefresh(reload)
+onOfflineDataChanged(reload)
 
 // Refresh the setting first so the confirmation names the amount that will
 // actually be booked, even if another session just changed it.
@@ -171,17 +216,32 @@ async function markPaid() {
 
   if (!selectedCashier.value || !selectedEvent.value || !selectedMember.value) return
 
-  const res = await $fetch('/api/fachschaft/pay', {
-    method: 'POST',
-    body: {
-      member_id: selectedMember.value,
-      cashier_id: selectedCashier.value,
-      event_id: selectedEvent.value,
-    }
-  })
+  const payload: FachschaftPayPayload = {
+    client_uuid: createClientUuid(),
+    member_id: Number(selectedMember.value),
+    amount: settings.value.fachschaft_payment_amount,
+    cashier_id: Number(selectedCashier.value),
+    event_id: Number(selectedEvent.value),
+  }
 
-  if (!res.ok) {
-    toast.error('error' in res && res.error ? String(res.error) : t('fachschaft.payFailed'))
+  let outcome
+  try {
+    outcome = await submit('fachschaft_payment', payload, {
+      cashierName: selectedCashierName.value,
+      eventName: selectedEventName.value,
+      summary: selectedMemberLabel.value,
+      localTotal: settings.value.fachschaft_payment_amount,
+    })
+  } catch {
+    toast.error(t('common.unknownError'))
+    return
+  }
+
+  if (outcome.status === 'rejected') {
+    toast.error(outcome.error ?? t('fachschaft.payFailed'))
+  } else if (outcome.status === 'queued') {
+    toast.info(t('offline.savedOffline'))
+    return
   }
 
   await loadPayments()
@@ -189,10 +249,14 @@ async function markPaid() {
 
 async function loadPayments() {
   try {
-    const res2 = await $fetch(`/api/fachschaft/payments?eventId=${selectedEvent.value}`)
-    if (res2.ok) {
-      if ('payments' in res2) payments.value = res2.payments
-    }
+    const result = await cachedFetch<any>(`/api/fachschaft/payments?eventId=${selectedEvent.value}`)
+    stale.value = result.stale
+    cachedAt.value = result.cachedAt
+    if (result.data.ok && 'payments' in result.data) payments.value = result.data.payments
+  } catch {
+    payments.value = []
+    stale.value = true
+    cachedAt.value = null
   } finally {
     paymentsLoading.value = false
   }

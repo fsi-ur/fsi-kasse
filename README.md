@@ -15,6 +15,7 @@ npm run setup:migrate:events         # events table + event_id on orders/fachsch
 npm run setup:migrate:app-settings   # app_settings table
 npm run setup:migrate:add-donations  # donations table
 npm run setup:migrate:price-snapshots # price/amount snapshots + item_price_history + app_settings_history
+npm run setup:migrate:client-uuid    # client_uuid on orders/donations/fachschaft_payments (offline idempotency)
 npm run setup:seed-admin             # admin bootstrap + auth role migration
 ```
 

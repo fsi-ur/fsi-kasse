@@ -84,6 +84,8 @@ CREATE TABLE IF NOT EXISTS orders (
   fachschaft TINYINT(1) NOT NULL DEFAULT 0,
   event_id BIGINT UNSIGNED NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  client_uuid CHAR(36) NULL,
+  UNIQUE KEY uq_orders_client_uuid (client_uuid),
   FOREIGN KEY (cashier_id) REFERENCES cashiers(id) ON DELETE CASCADE,
   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
 );
@@ -133,6 +135,8 @@ CREATE TABLE IF NOT EXISTS fachschaft_payments (
   event_id BIGINT UNSIGNED NOT NULL,
   amount DECIMAL(10,2) NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  client_uuid CHAR(36) NULL,
+  UNIQUE KEY uq_fachschaft_payments_client_uuid (client_uuid),
   FOREIGN KEY (member_id) REFERENCES cashiers(id),
   FOREIGN KEY (cashier_id) REFERENCES cashiers(id),
   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
@@ -145,6 +149,8 @@ CREATE TABLE IF NOT EXISTS donations (
   amount DECIMAL(10,2) NOT NULL,
   order_id BIGINT UNSIGNED NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  client_uuid CHAR(36) NULL,
+  UNIQUE KEY uq_donations_client_uuid (client_uuid),
   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
   FOREIGN KEY (cashier_id) REFERENCES cashiers(id) ON DELETE CASCADE,
   FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL

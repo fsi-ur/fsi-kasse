@@ -10,7 +10,8 @@
     </template>
 
     <template #cards>
-      <component :is="activeComponent" />
+      <CommonOfflineNotice v-if="!isOnline && currentTab !== 'general'" variant="unavailable" />
+      <component :is="activeComponent" v-else />
     </template>
   </Page>
 </template>
@@ -19,6 +20,7 @@
 import { computed } from 'vue'
 import { useI18n } from '~/composables/useI18n'
 import { usePage } from '~/composables/usePage'
+import { useConnectivity } from '~/composables/useConnectivity'
 import SettingsGeneral from './settings/General.vue'
 import SettingsCashRegister from './settings/CashRegister.vue'
 import SettingsItems from './settings/Items.vue'
@@ -35,6 +37,7 @@ type SettingsTab = 'general' | 'cashRegister' | 'items' | 'cashiers' | 'events' 
 const currentTab = useState<SettingsTab>('settings-overview-current-tab', () => 'general')
 const { t } = useI18n()
 const { pageMeta, setPage } = usePage()
+const { isOnline } = useConnectivity()
 
 const tabs = computed(() => [
   { key: 'general', label: t('settings.tabs.general') },

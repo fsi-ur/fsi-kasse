@@ -25,6 +25,7 @@
           />
         </button>
         <h1 v-if="headline1" class="text-2xl font-bold">{{ headline1 }}</h1>
+        <OfflineStatus />
       </div>
 
       <slot name="header" v-bind="{ headerContainerRef, headlineGroupRef }"></slot>

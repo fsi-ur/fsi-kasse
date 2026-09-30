@@ -16,10 +16,12 @@
 import { useI18n } from '~/composables/useI18n'
 import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
 import type { SearchSelectOption } from '~/components/Common/SearchSelect.vue'
+import { cachedFetch } from '~/composables/useCachedFetch'
+import { onOfflineDataChanged } from '~/composables/useOfflineQueue'
 
 const events = ref<any[]>([])
 const query = ref('')
-const { selectedEvent } = useCheckout()
+const { selectedEvent, selectedEventName } = useCheckout()
 const { t } = useI18n()
 const { formatLocalDateTime } = useLocaleFormatters()
 
@@ -49,6 +51,10 @@ function findActiveEvent(list: any[]) {
   return list.find(entry => String(entry.starts_at) <= now && now <= String(entry.ends_at))
 }
 
+watch(selectedLabel, (label) => {
+  selectedEventName.value = label
+}, { immediate: true })
+
 function onSelect(value: unknown) {
   selectedEvent.value = Number(value)
   query.value = ''
@@ -59,10 +65,21 @@ function clearSelection() {
 }
 
 async function loadEvents() {
-  const res = await $fetch('/api/events', { method: 'GET' })
+  let result
+  try {
+    result = await cachedFetch<any>('/api/events')
+  } catch {
+    return
+  }
+
+  const res = result.data
   if (res.ok) {
     const allEvents = 'events' in res ? res.events as any[] : []
     events.value = allEvents.filter(i => i.is_active === 1 || i.is_active === true)
+
+    if (!result.stale && selectedEvent.value && !events.value.some(entry => entry.id === selectedEvent.value)) {
+      selectedEvent.value = ''
+    }
 
     if (!selectedEvent.value) {
       const activeEvent = findActiveEvent(events.value)
@@ -73,4 +90,5 @@ async function loadEvents() {
 
 onMounted(loadEvents)
 useAppRefresh().onRefresh(loadEvents)
+onOfflineDataChanged(loadEvents)
 </script>

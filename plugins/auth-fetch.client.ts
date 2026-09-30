@@ -1,3 +1,5 @@
+import { useConnectivity } from '~/composables/useConnectivity'
+
 type ApiErrorResponse = {
   ok?: boolean
   error?: string
@@ -17,9 +19,19 @@ function isPasswordChangeRequiredResponse(data: unknown) {
   return response.ok === false && response.error === 'Password change required'
 }
 
+const UNREACHABLE_STATUSES = new Set([502, 503, 504])
+
 export default defineNuxtPlugin(() => {
+  const { markOnline, markOffline } = useConnectivity()
+
   const apiFetch = $fetch.create({
+    onRequestError() {
+      markOffline()
+    },
     onResponse({ response }) {
+      if (UNREACHABLE_STATUSES.has(response.status)) markOffline()
+      else markOnline()
+
       if (isUnauthenticatedResponse(response._data)) {
         useAuth().redirectToLogin()
       }

@@ -4,15 +4,49 @@ import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
 import { getCashRegisterCashierById } from '~/server/utils/cashiers'
 import { getCashRegisterEventById } from '~/server/utils/events'
-import { getCashRegisterSettings } from '~/server/utils/appSettings'
+import { getCashRegisterSettings, isKnownFachschaftPaymentAmount } from '~/server/utils/appSettings'
+import { isDuplicateEntryError, normalizeClientUuid } from '~/server/utils/checkout'
+
+async function findCommittedPayment(clientUuid: string) {
+  const rows = await query<Array<{ id: number, amount: string | number }>>(
+    `SELECT id, amount FROM fachschaft_payments WHERE client_uuid = ? LIMIT 1`,
+    [clientUuid],
+  )
+  const row = rows[0]
+  if (!row) return null
+
+  return {
+    ok: true as const,
+    duplicate: true,
+    payment_id: Number(row.id),
+    order_id: Number(row.id),
+    amount: Number(row.amount),
+  }
+}
 
 export default defineEventHandler(async (event) => {
   const current = await requirePermission(event, 'cash_register.use')
   if (!current.ok) return current
 
-  const { cashier_id, event_id, member_id } = await readBody(event)
+  const { cashier_id, event_id, member_id, client_uuid, amount } = await readBody(event)
+
+  // Optional: live callers may omit it, but a value that is present must be valid.
+  const clientUuid = client_uuid == null ? null : normalizeClientUuid(client_uuid)
+  if (client_uuid != null && !clientUuid) {
+    return { ok: false, error: 'Missing or invalid client_uuid' }
+  }
+
+  if (clientUuid) {
+    const committed = await findCommittedPayment(clientUuid)
+    if (committed) return committed
+  }
 
   if (!cashier_id || !event_id || !member_id) {
+    return { ok: false, error: 'Missing payment details' }
+  }
+
+  const requestedAmount = amount == null ? null : Math.round(Number(amount) * 100) / 100
+  if (requestedAmount !== null && (!Number.isFinite(requestedAmount) || requestedAmount <= 0)) {
     return { ok: false, error: 'Missing payment details' }
   }
 
@@ -40,14 +74,25 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'Selected event is not active' }
   }
 
-  // The amount is snapshotted from the current setting, never from the request
-  // body, so a later settings change does not revalue this payment.
-  const settings = await getCashRegisterSettings()
+  if (requestedAmount !== null && !(await isKnownFachschaftPaymentAmount(requestedAmount))) {
+    return { ok: false, error: 'Payment amount does not match any known Fachschaft amount' }
+  }
 
-  const result = await query(
-    `INSERT INTO fachschaft_payments (member_id, cashier_id, event_id, amount) VALUES (?, ?, ?, ?)`,
-    [member_id, cashier_id, event_id, settings.fachschaft_payment_amount.toFixed(2)]
-  )
+  const bookedAmount = requestedAmount ?? (await getCashRegisterSettings()).fachschaft_payment_amount
+
+  let result
+  try {
+    result = await query(
+      `INSERT INTO fachschaft_payments (member_id, cashier_id, event_id, amount, client_uuid) VALUES (?, ?, ?, ?, ?)`,
+      [member_id, cashier_id, event_id, bookedAmount.toFixed(2), clientUuid]
+    )
+  } catch (error) {
+    if (!clientUuid || !isDuplicateEntryError(error)) throw error
+
+    const replayed = await findCommittedPayment(clientUuid)
+    if (replayed) return replayed
+    throw error
+  }
 
   const payment_id = normalizeBigInt((result as any).insertId)
 
@@ -55,6 +100,6 @@ export default defineEventHandler(async (event) => {
     ok: true,
     payment_id: normalizeBigInt(payment_id),
     order_id: normalizeBigInt(payment_id),
-    amount: settings.fachschaft_payment_amount,
+    amount: bookedAmount,
   }
 })

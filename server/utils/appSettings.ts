@@ -41,6 +41,28 @@ export async function getCashRegisterSettings(conn?: any): Promise<CashRegisterS
   })
 }
 
+export async function isKnownFachschaftPaymentAmount(amount: number) {
+  const cents = Math.round(amount * 100)
+  const toCents = (value: unknown) => Math.round(Number(value) * 100)
+
+  if (cents === toCents(DEFAULT_CASH_REGISTER_SETTINGS.fachschaft_payment_amount)) return true
+
+  const settings = await getCashRegisterSettings()
+  if (cents === toCents(settings.fachschaft_payment_amount)) return true
+
+  let rows: Array<{ setting_value: string | null }> = []
+  try {
+    rows = await query<Array<{ setting_value: string | null }>>(
+      `SELECT setting_value FROM app_settings_history WHERE setting_key = ?`,
+      [SETTING_KEYS.fachschaft_payment_amount],
+    )
+  } catch (err: any) {
+    if (err?.code !== 'ER_NO_SUCH_TABLE') throw err
+  }
+
+  return rows.some(row => row.setting_value !== null && toCents(row.setting_value) === cents)
+}
+
 export async function saveCashRegisterSettings(
   settings: Partial<CashRegisterSettings>,
   changedBy?: string | null,

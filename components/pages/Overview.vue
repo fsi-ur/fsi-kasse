@@ -10,6 +10,8 @@
       </div>
 
       <template v-else-if="data">
+        <CommonOfflineNotice v-if="stale" :cached-at="cachedAt" />
+
         <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
           <h2 class="text-lg font-semibold mb-4">{{ t('overview.regularSales') }}</h2>
 
@@ -159,6 +161,8 @@
         </div>
       </template>
 
+      <CommonOfflineNotice v-else-if="stale" variant="noData" />
+
       <div v-else-if="loading" class="col-span-12 text-base-500">
         {{ t('common.loading') }}
       </div>
@@ -170,6 +174,8 @@
 import { useI18n } from '~/composables/useI18n'
 import { useAppRefresh } from '~/composables/useAppRefresh'
 import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
+import { cachedFetch } from '~/composables/useCachedFetch'
+import { onOfflineDataChanged } from '~/composables/useOfflineQueue'
 
 const { selectedEvent } = useCheckout()
 const { t } = useI18n()
@@ -182,6 +188,8 @@ const emit = defineEmits<{
 
 const data = ref<any | null>(null)
 const loading = ref(true)
+const stale = ref(false)
+const cachedAt = ref<number | null>(null)
 
 const MAX_BAR_HEIGHT = 160
 
@@ -232,9 +240,18 @@ async function loadOverview() {
   }
 
   loading.value = true
-  const res = await $fetch(`/api/overview?eventId=${selectedEvent.value}`, { method: 'GET' })
-  if (res.ok) data.value = res
-  loading.value = false
+  try {
+    const result = await cachedFetch<any>(`/api/overview?eventId=${selectedEvent.value}`)
+    stale.value = result.stale
+    cachedAt.value = result.cachedAt
+    if (result.data.ok) data.value = result.data
+  } catch {
+    data.value = null
+    stale.value = true
+    cachedAt.value = null
+  } finally {
+    loading.value = false
+  }
 }
 
 watch(selectedEvent, () => {
@@ -243,6 +260,7 @@ watch(selectedEvent, () => {
 
 onMounted(loadOverview)
 onRefresh(loadOverview)
+onOfflineDataChanged(loadOverview)
 </script>
 
 <style scoped>

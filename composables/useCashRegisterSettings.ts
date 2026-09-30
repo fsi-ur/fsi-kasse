@@ -1,4 +1,5 @@
 import type { CashRegisterSettings, CashRegisterSettingsError, CashRegisterSettingsResponse } from '~/types/settings'
+import { cachedFetch } from '~/composables/useCachedFetch'
 
 const FALLBACK_SETTINGS: CashRegisterSettings = {
   fachschaft_payment_amount: 10,
@@ -14,7 +15,7 @@ export const useCashRegisterSettings = () => {
     if (loaded.value && !force) return settings.value
 
     try {
-      const res = await $fetch<CashRegisterSettingsResponse | CashRegisterSettingsError>('/api/settings')
+      const { data: res } = await cachedFetch<CashRegisterSettingsResponse | CashRegisterSettingsError>('/api/settings')
       if (res.ok) {
         settings.value = res.settings
         canManage.value = res.can_manage

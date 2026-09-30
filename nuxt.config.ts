@@ -1,8 +1,14 @@
 import tailwindcss from "@tailwindcss/vite";
 
+const baseURL = process.env.APP_BASE_URL || '/'
+// Changes on every build, so the service worker re-fetches the app shell
+// whenever the bundle it references changes.
+const buildRevision = Date.now().toString(36)
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-12-05',
   devtools: { enabled: false },
+  ssr: false,
   modules: ['@vite-pwa/nuxt', '@nuxt/icon'],
   css: ['~/assets/css/main.css'],
   runtimeConfig: {
@@ -12,14 +18,29 @@ export default defineNuxtConfig({
   },
   app: {
     // Allow hosting under a subpath like /kasse
-    baseURL: process.env.APP_BASE_URL || '/'
+    baseURL,
+  },
+  icon: {
+    clientBundle: {
+      scan: {
+        globInclude: ['app.vue', 'components/**/*.vue', 'layouts/**/*.vue', 'config/**/*.ts', 'composables/**/*.ts'],
+      },
+      includeCustomCollections: true,
+    },
   },
   vite: {
     plugins: [tailwindcss()]
   },
   pages: false,
   pwa: {
-    registerType: 'autoUpdate',
+    registerType: 'prompt',
+    workbox: {
+      globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2,webmanifest}'],
+      maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+      additionalManifestEntries: [{ url: baseURL, revision: buildRevision }],
+      navigateFallback: baseURL,
+      navigateFallbackDenylist: [/\/api\//],
+    },
     manifest: {
       name: 'Kassensystem',
       short_name: 'kassensystem',
