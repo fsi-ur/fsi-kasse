@@ -13,6 +13,9 @@ export default defineEventHandler(async (event) => {
   const { name, image, is_active = 1 } = await readBody(event)
   if (!name) return { ok: false, error: 'Missing fields' }
 
-  await query(`INSERT INTO cashiers (name, image, is_active) VALUES (?, ?, ?)`, [name, image, is_active])
+  await query(
+    `INSERT INTO cashiers (name, image, is_active, is_guest, affiliation_id) VALUES (?, ?, ?, 0, NULL)`,
+    [name, image, is_active],
+  )
   return { ok: true }
 })

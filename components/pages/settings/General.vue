@@ -17,14 +17,14 @@
       <div>
         <h3 class="font-semibold">{{ t('settings.passwordTitle') }}</h3>
         <p class="text-sm text-base-600">
-          {{ isConnectedMode ? t('settings.credentialsConnectedNotice') : t('settings.passwordText') }}
+          {{ credentialsLocked ? t('settings.credentialsConnectedNotice') : t('settings.passwordText') }}
         </p>
       </div>
 
-      <button class="btn-secondary" :disabled="isConnectedMode || !isOnline" @click="openPasswordModal">
+      <button class="btn-secondary" :disabled="credentialsLocked || !isOnline" @click="openPasswordModal">
         {{ t('settings.passwordOpen') }}
       </button>
-      <p v-if="!isOnline && !isConnectedMode" class="text-xs text-warning-700">{{ t('offline.actionUnavailable') }}</p>
+      <p v-if="!isOnline && !credentialsLocked" class="text-xs text-warning-700">{{ t('offline.actionUnavailable') }}</p>
     </section>
 
     <section class="rounded-xl border border-base-200 p-4 space-y-3">
@@ -39,7 +39,7 @@
         </button>
 
         <button
-          v-if="!isConnectedMode"
+          v-if="!credentialsLocked"
           class="btn-secondary"
           :disabled="isLoggingOutAll || !isOnline"
           :class="{ 'opacity-50 cursor-not-allowed': isLoggingOutAll }"
@@ -139,7 +139,7 @@ import { useConnectivity } from '~/composables/useConnectivity'
 import type { LogoutAllResponse } from '~/server/api/auth/logout-all.post'
 
 const { setPage } = usePage()
-const { logout, redirectToLogin } = useAuth()
+const { user, logout, redirectToLogin } = useAuth()
 const { isOnline } = useConnectivity()
 const { t, language, toggleLanguage } = useI18n()
 const toast = useToast()
@@ -147,6 +147,7 @@ const { isChangingPassword, passwordForm, resetPasswordForm, submitPasswordChang
 
 const runtimeConfig = useRuntimeConfig()
 const isConnectedMode = runtimeConfig.public.accountingMode === 'connected'
+const credentialsLocked = computed(() => isConnectedMode && user.value?.kind !== 'guest')
 
 const showLogoutConfirm = ref(false)
 const showLogoutAllConfirm = ref(false)
@@ -154,7 +155,7 @@ const showPasswordModal = ref(false)
 const isLoggingOutAll = ref(false)
 
 function openPasswordModal() {
-  if (isConnectedMode) return
+  if (credentialsLocked.value) return
   resetPasswordForm()
   showPasswordModal.value = true
 }

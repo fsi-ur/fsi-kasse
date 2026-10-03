@@ -14,6 +14,6 @@ export default defineEventHandler(async (event) => {
   if (id == undefined || is_active == undefined) return { ok: false, error: 'Missing fields' }
   if (is_active != 0 && is_active != 1) return { ok: false, error: 'Illegal value for is_active' }
 
-  await query(`UPDATE cashiers SET is_active = ? WHERE id = ?`, [is_active, id])
+  await query(`UPDATE cashiers SET is_active = ? WHERE id = ? AND is_guest = 0`, [is_active, id])
   return { ok: true }
 })

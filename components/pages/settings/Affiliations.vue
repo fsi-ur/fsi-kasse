@@ -1,24 +1,19 @@
 <template>
   <PagesSettingsEntityManager
     ref="managerRef"
-    :title="t('cashiers.allCashiers')"
-    :singular-label="t('cashiers.cashierName')"
-    :add-label="t('cashiers.newCashier')"
-    :empty-label="t('cashiers.none')"
-    persist-key="settings-cashiers"
-    list-endpoint="/api/cashiers"
-    save-endpoint="/api/cashiers/create"
-    activate-endpoint="/api/cashiers/activate"
-    delete-endpoint="/api/cashiers/delete"
-    :delete-confirm-title="t('cashiers.deleteConfirmTitle')"
-    :delete-confirm-question="(item) => t('cashiers.deleteConfirmQuestion', { name: item.name })"
-    response-list-key="cashiers"
+    :title="t('affiliations.all')"
+    :singular-label="t('affiliations.singular')"
+    :add-label="t('affiliations.new')"
+    :empty-label="t('affiliations.none')"
+    persist-key="settings-affiliations"
+    list-endpoint="/api/affiliations"
+    save-endpoint="/api/affiliations/create"
+    update-endpoint="/api/affiliations/update"
+    activate-endpoint="/api/affiliations/activate"
+    response-list-key="affiliations"
     :extra-columns="columns"
-    :editable="false"
-    :read-only="readOnly"
-    :read-only-notice="t('cashiers.connectedNotice')"
     :create-item="() => ({ name: '' })"
-    :transform-items="(items) => items.filter(item => !(item as { is_guest?: boolean }).is_guest)"
+    :map-edit-item="(item) => ({ id: item.id, name: item.name })"
     :on-error="handleError"
   >
     <template #cell-is_active="{ item }">
@@ -40,7 +35,6 @@ const { t } = useI18n()
 const toast = useToast()
 
 const managerRef = ref<{ loadItems: () => Promise<void> } | null>(null)
-const readOnly = ref(false)
 
 const columns: EntityManagerColumn[] = [
   {
@@ -58,10 +52,5 @@ function handleError(context: { message?: string }) {
 
 useAppRefresh().onRefresh(async () => {
   await managerRef.value?.loadItems()
-})
-
-onMounted(async () => {
-  const res = await $fetch('/api/cashiers', { method: 'GET' })
-  if (res.ok && 'read_only' in res) readOnly.value = Boolean(res.read_only)
 })
 </script>

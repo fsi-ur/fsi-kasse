@@ -1,6 +1,7 @@
 import { defineEventHandler, readBody } from 'h3'
 import { accountingQuery, isConnectedAccountingMode, withAccountingTransaction } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
+import { isUsernameTaken } from '~/server/utils/guests'
 
 interface ChangeUsernameBody {
   user_id?: number
@@ -32,6 +33,8 @@ export default defineEventHandler(async (event): Promise<ChangeUsernameResponse>
 
   if (!Number.isInteger(userId) || userId <= 0) return { ok: false, error: 'Missing fields' }
   if (!username) return { ok: false, error: 'Username required' }
+  // Usernames are unique across regular users and guest accounts.
+  if (await isUsernameTaken(username, { excludeUserId: userId })) return { ok: false, error: 'Username already exists' }
 
   try {
     await withAccountingTransaction(async (conn) => {

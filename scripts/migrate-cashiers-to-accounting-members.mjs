@@ -80,6 +80,9 @@ async function ensureAccountingMemberIdColumn(conn) {
 }
 
 async function fetchLocalCashiers(conn) {
+  const guestColumn = await conn.query(`SHOW COLUMNS FROM cashiers LIKE 'is_guest'`)
+  const guestFilter = guestColumn.length ? 'WHERE c.is_guest = 0' : ''
+
   const rows = await conn.query(`
     SELECT
       c.id,
@@ -93,6 +96,7 @@ async function fetchLocalCashiers(conn) {
     LEFT JOIN orders o ON o.cashier_id = c.id
     LEFT JOIN fachschaft_payments fp_cashier ON fp_cashier.cashier_id = c.id
     LEFT JOIN fachschaft_payments fp_member ON fp_member.member_id = c.id
+    ${guestFilter}
     GROUP BY c.id, c.name, c.accounting_member_id, c.is_active
     ORDER BY c.name ASC, c.id ASC
   `)

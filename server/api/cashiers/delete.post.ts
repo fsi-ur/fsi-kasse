@@ -13,6 +13,6 @@ export default defineEventHandler(async (event) => {
   const { id } = await readBody(event)
   if (!id) return { ok: false, error: 'Missing ID' }
 
-  await query(`DELETE FROM cashiers WHERE id = ?`, [id])
+  await query(`DELETE FROM cashiers WHERE id = ? AND is_guest = 0`, [id])
   return { ok: true }
 })

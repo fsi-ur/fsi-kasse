@@ -16,6 +16,7 @@ npm run setup:migrate:app-settings   # app_settings table
 npm run setup:migrate:add-donations  # donations table
 npm run setup:migrate:price-snapshots # price/amount snapshots + item_price_history + app_settings_history
 npm run setup:migrate:client-uuid    # client_uuid on orders/donations/fachschaft_payments (offline idempotency)
+npm run setup:migrate:guests         # affiliations, guest_users, guest_sessions + cashiers.is_guest/affiliation_id
 npm run setup:seed-admin             # admin bootstrap + auth role migration
 ```
 
@@ -87,8 +88,31 @@ are not set.
 ### Permissions
 
 Access is controlled through the permission keys `cash_register.use`
-(use checkout, history, Fachschaft payments) and `cash_register.manage`
-(items, cashiers, events, users, overview, settings). `manage` implies `use`.
+(use checkout, history, Fachschaft payments), `cash_register.guest_manage`
+(guest accounts and guest cashiers) and `cash_register.manage` (items,
+cashiers, events, users, affiliations, overview, settings). `manage` implies
+`guest_manage`, which implies `use`.
+
+### Guest accounts and Zugehörigkeiten
+
+Guests are owned by the till in **both** modes and live in the local database,
+never in the accounting app:
+
+- **Gastkonten** (`guest_users`, `guest_sessions`) — login accounts with level
+  `use` (sell like a regular user) or `manage` (additionally manage guests).
+  A password change at next login can be required when creating a guest or
+  setting its password; guests can complete it in connected mode too.
+- **Gastkassierer** — rows in `cashiers` with `is_guest = 1` and no accounting
+  member. They sell and can be Fachschaft members like any cashier, but the
+  accounting sync never touches them. Cashiers with bookings can only be
+  deactivated, not deleted.
+- **Zugehörigkeiten** (`affiliations`) — only used to sort guests. Managed by
+  regular admins (Settings → Zugehörigkeiten); they can be deactivated but
+  not deleted. A guest manager *with* an affiliation can only see and manage
+  guests of that affiliation; one without, and every regular admin, manages all.
+
+Usernames are unique across regular users and guests; on login regular users
+are checked first.
 
 ### Cash register settings
 

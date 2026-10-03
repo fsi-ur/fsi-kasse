@@ -3,6 +3,7 @@ import { hashPassword } from '~/server/utils/auth'
 import { accountingQuery, isConnectedAccountingMode, withAccountingTransaction } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
 import { getRoleIdByCode } from '~/server/utils/roles'
+import { isUsernameTaken } from '~/server/utils/guests'
 
 export default defineEventHandler(async (event) => {
   const current = await requirePermission(event, 'cash_register.manage', { touch: false })
@@ -16,6 +17,7 @@ export default defineEventHandler(async (event) => {
   const { username, password, role = 'user', is_active = 1 } = body
 
   if (!username || !password) return { ok: false, error: 'Missing fields' }
+  if (await isUsernameTaken(String(username).trim())) return { ok: false, error: 'Username already exists' }
 
   const passwordHash = await hashPassword(password)
 

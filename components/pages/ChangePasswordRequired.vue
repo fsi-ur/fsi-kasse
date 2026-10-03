@@ -4,12 +4,12 @@
       <div>
         <h2 class="text-xl font-semibold">{{ t('passwordChangeRequired.title') }}</h2>
         <p class="mt-1 text-sm text-base-600">
-          {{ isConnectedMode ? t('passwordChangeRequired.connectedText') : t('passwordChangeRequired.text') }}
+          {{ credentialsLocked ? t('passwordChangeRequired.connectedText') : t('passwordChangeRequired.text') }}
         </p>
       </div>
 
-      <!-- Connected mode: the password lives in the accounting app, so offer no form here. -->
-      <div v-if="isConnectedMode" class="flex items-center justify-between gap-3">
+      <!-- Connected mode: the password lives in the accounting app, so offer no form here (guests excepted). -->
+      <div v-if="credentialsLocked" class="flex items-center justify-between gap-3">
         <button type="button" class="btn-secondary" :disabled="isRechecking" @click="logout()">
           {{ t('actions.logout') }}
         </button>
@@ -91,7 +91,7 @@ import { useToast } from '~/composables/useToast'
 import { useChangePassword } from '~/composables/useChangePassword'
 import { MIN_PASSWORD_LENGTH } from '~/config/validation'
 
-const { fetchSession, logout } = useAuth()
+const { user, fetchSession, logout } = useAuth()
 const { setPage } = usePage()
 const { t } = useI18n()
 const toast = useToast()
@@ -99,6 +99,8 @@ const { isChangingPassword, passwordForm, submitPasswordChange } = useChangePass
 
 const runtimeConfig = useRuntimeConfig()
 const isConnectedMode = runtimeConfig.public.accountingMode === 'connected'
+// Guest accounts are till-owned, so new guests can complete the change here in connected mode too.
+const credentialsLocked = computed(() => isConnectedMode && user.value?.kind !== 'guest')
 const isRechecking = ref(false)
 
 function continueToApp() {

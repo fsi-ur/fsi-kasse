@@ -1,6 +1,6 @@
 import { defineEventHandler, getCookie, readBody } from 'h3'
 import { comparePassword, hashPassword, hmacToken } from '~/server/utils/auth'
-import { accountingQuery, isConnectedAccountingMode, withAccountingTransaction } from '~/server/utils/db'
+import { accountingQuery, isConnectedAccountingMode, query, withAccountingTransaction, withTransaction } from '~/server/utils/db'
 import { getCurrentUserFromEvent } from '~/server/utils/sessionGuard'
 import { MIN_PASSWORD_LENGTH } from '~/config/validation'
 
@@ -27,7 +27,9 @@ export default defineEventHandler(async (event): Promise<ChangePasswordResponse>
   const current = await getCurrentUserFromEvent(event, true)
   if (!current.ok) return { ok: false, error: 'Not authenticated' }
 
-  if (isConnectedAccountingMode()) {
+  // Guest accounts are till-owned, so they can change their password in connected mode too.
+  const isGuest = current.user.kind === 'guest'
+  if (!isGuest && isConnectedAccountingMode()) {
     return { ok: false, error: 'User management is disabled in connected mode' }
   }
 
@@ -52,10 +54,15 @@ export default defineEventHandler(async (event): Promise<ChangePasswordResponse>
     return { ok: false, error: 'Passwords do not match' }
   }
 
-  const rows = await accountingQuery<{ password_hash: string }[]>(
-    'SELECT password_hash FROM users WHERE id = ? AND is_active = 1 LIMIT 1',
-    [current.user.id],
-  )
+  const rows = isGuest
+    ? await query<{ password_hash: string }[]>(
+        'SELECT password_hash FROM guest_users WHERE id = ? AND is_active = 1 LIMIT 1',
+        [current.user.id],
+      )
+    : await accountingQuery<{ password_hash: string }[]>(
+        'SELECT password_hash FROM users WHERE id = ? AND is_active = 1 LIMIT 1',
+        [current.user.id],
+      )
   const user = rows[0]
   if (!user) return { ok: false, error: 'Not authenticated' }
 
@@ -66,6 +73,22 @@ export default defineEventHandler(async (event): Promise<ChangePasswordResponse>
   const currentTokenHash = hmacToken(token)
 
   try {
+    if (isGuest) {
+      await withTransaction(async (conn) => {
+        await query(
+          'UPDATE guest_users SET password_hash = ?, must_change_password = 0 WHERE id = ?',
+          [newPasswordHash, current.user.id],
+          conn,
+        )
+        await query(
+          'DELETE FROM guest_sessions WHERE guest_user_id = ? AND token_hash <> ?',
+          [current.user.id, currentTokenHash],
+          conn,
+        )
+      })
+      return { ok: true }
+    }
+
     await withAccountingTransaction(async (conn) => {
       await accountingQuery(
         'UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?',

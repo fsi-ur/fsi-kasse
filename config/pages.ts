@@ -13,5 +13,5 @@ export const PAGES: Record<string, AppPage> = {
   History: { main: true, labelKey: 'pages.history', component: HistoryPage, icon: 'material-symbols:history-rounded', permissions: ['cash_register.use'] },
   Fachschaft: { main: true, labelKey: 'pages.fachschaft', component: FachschaftPage, icon: 'material-symbols:payments-outline-rounded', permissions: ['cash_register.use'] },
   Overview: { main: true, labelKey: 'pages.overview', component: OverviewPage, icon: 'material-symbols:monitoring-rounded', permissions: ['cash_register.manage'] },
-  Settings: { main: true, labelKey: 'pages.settings', component: SettingsPage, icon: 'material-symbols:settings-rounded', permissions: ['cash_register.manage'], preserveOnRefresh: true },
+  Settings: { main: true, labelKey: 'pages.settings', component: SettingsPage, icon: 'material-symbols:settings-rounded', permissions: ['cash_register.manage', 'cash_register.guest_manage'], preserveOnRefresh: true },
 }
