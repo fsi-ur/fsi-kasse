@@ -11,6 +11,7 @@ export interface CheckoutPayload {
   cashier_id: number
   event_id: number
   is_fachschaft: boolean
+  stand_id?: number | null
   /** unit_price/unit_deposit are what the cashier charged; the server books them. */
   items: Array<{ id: number, quantity: number, unit_price: number, unit_deposit: number }>
   donation:
@@ -31,6 +32,7 @@ export interface FachschaftPayPayload {
 export interface OutboxDisplay {
   cashierName: string
   eventName: string
+  standName?: string
   summary: string
   localTotal: number
 }

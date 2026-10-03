@@ -4,6 +4,7 @@
       <div class="ml-auto flex flex-col gap-2 md:flex-row md:gap-4">
         <MenuSelectCashier />
         <MenuSelectEvent />
+        <MenuSelectStand />
       </div>
     </template>
 
@@ -11,10 +12,27 @@
       <CommonOfflineNotice v-if="itemsUnavailable" variant="noData" />
 
       <div class="col-span-12 lg:col-span-6 xl:col-span-8 bg-white p-4 rounded-xl shadow-lg">
-        <h2 class="text-lg font-semibold mb-4">{{ t('checkout.items') }}</h2>
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <h2 class="text-lg font-semibold">
+            {{ t('checkout.items') }}<template v-if="effectiveStand"> · {{ effectiveStand.name }}</template>
+          </h2>
+          <button
+            v-if="effectiveStand"
+            class="ml-auto px-4 py-2 rounded-md text-sm cursor-pointer transition-colors"
+            :class="showAllItems
+              ? 'bg-accent-500 text-white hover:bg-accent-600'
+              : 'bg-base-200 text-black hover:bg-base-300'"
+            @click="showAllItems = !showAllItems"
+          >
+            {{ showAllItems ? t('checkout.showStandItems', { stand: effectiveStand.name }) : t('checkout.showAllItems') }}
+          </button>
+        </div>
+        <div v-if="effectiveStand && visibleItems.length === 0 && items.length > 0" class="text-base-400">
+          {{ t('checkout.standHasNoItems') }}
+        </div>
         <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
           <div
-            v-for="item in items"
+            v-for="item in visibleItems"
             :key="item.id"
             class="bg-base-100 border border-base-200 p-4 rounded-lg cursor-pointer transition-colors hover:bg-base-200"
             @click="addToOrder(item)"
@@ -196,8 +214,9 @@ const emit = defineEmits<{
 
 const {
   selectedCashier, selectedEvent, selectedCashierName, selectedEventName, orderItems, isFachschaft,
-  donationMode, directDonation: directAmount, paidAmount,
+  donationMode, directDonation: directAmount, paidAmount, showAllItems,
 } = useCheckout()
+const { effectiveStand } = useStands()
 const { t } = useI18n()
 const { formatCurrency } = useLocaleFormatters()
 const toast = useToast()
@@ -286,6 +305,15 @@ function setDonationMode(mode: 'direct' | 'paid' | null) {
 watch([() => orderItems.value.length, isFachschaft], ([count, fachschaft]) => {
   if (donationMode.value === 'paid' && (count === 0 || fachschaft)) setDonationMode(null)
 }, { immediate: true })
+
+// "Alle Artikel anzeigen" only widens the grid; the order still counts for the
+// selected stand. The cart is never filtered — it is reconciled against all items.
+const visibleItems = computed(() => {
+  const stand = effectiveStand.value
+  if (!stand || showAllItems.value) return items.value
+  const standItemIds = new Set(stand.item_ids)
+  return items.value.filter(item => standItemIds.has(Number(item.id)))
+})
 
 async function loadItems() {
   let result
@@ -377,6 +405,7 @@ async function finishOrder() {
     cashier_id: Number(selectedCashier.value),
     event_id: Number(selectedEvent.value),
     is_fachschaft: isFachschaft.value,
+    stand_id: effectiveStand.value?.id ?? null,
     items: orderItems.value.map(line => ({
       id: line.id,
       quantity: line.quantity,
@@ -398,6 +427,7 @@ async function finishOrder() {
     outcome = await submit('checkout', payload, {
       cashierName: selectedCashierName.value,
       eventName: selectedEventName.value,
+      standName: effectiveStand.value?.name,
       summary: summaryParts.join(', '),
       localTotal,
     })

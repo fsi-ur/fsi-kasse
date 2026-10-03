@@ -24,6 +24,7 @@ import { useConnectivity } from '~/composables/useConnectivity'
 import SettingsGeneral from './settings/General.vue'
 import SettingsCashRegister from './settings/CashRegister.vue'
 import SettingsItems from './settings/Items.vue'
+import SettingsStands from './settings/Stands.vue'
 import SettingsCashiers from './settings/Cashiers.vue'
 import SettingsEvents from './settings/Events.vue'
 import SettingsUsers from './settings/Users.vue'
@@ -34,7 +35,7 @@ defineEmits<{
   (e: 'openMenu'): void
 }>()
 
-type SettingsTab = 'general' | 'cashRegister' | 'items' | 'cashiers' | 'events' | 'users' | 'guests' | 'affiliations'
+type SettingsTab = 'general' | 'cashRegister' | 'items' | 'stands' | 'cashiers' | 'events' | 'users' | 'guests' | 'affiliations'
 
 const currentTab = useState<SettingsTab>('settings-overview-current-tab', () => 'general')
 const { t } = useI18n()
@@ -52,6 +53,7 @@ const tabs = computed(() => {
     { key: 'general', label: t('settings.tabs.general'), visible: true },
     { key: 'cashRegister', label: t('settings.tabs.cashRegister'), visible: canManage },
     { key: 'items', label: t('settings.tabs.items'), visible: canManage },
+    { key: 'stands', label: t('settings.tabs.stands'), visible: canManage },
     { key: 'cashiers', label: t('settings.tabs.cashiers'), visible: canManage },
     { key: 'events', label: t('settings.tabs.events'), visible: canManage },
     { key: 'users', label: t('settings.tabs.users'), visible: canManage },
@@ -72,6 +74,8 @@ const activeComponent = computed(() => {
       return SettingsCashRegister
     case 'items':
       return SettingsItems
+    case 'stands':
+      return SettingsStands
     case 'cashiers':
       return SettingsCashiers
     case 'events':

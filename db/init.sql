@@ -69,6 +69,22 @@ CREATE TABLE IF NOT EXISTS items (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS stands (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL UNIQUE,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS stand_items (
+  stand_id BIGINT UNSIGNED NOT NULL,
+  item_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (stand_id, item_id),
+  INDEX idx_stand_items_item (item_id),
+  FOREIGN KEY (stand_id) REFERENCES stands(id) ON DELETE CASCADE,
+  FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS affiliations (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL UNIQUE,
@@ -117,11 +133,14 @@ CREATE TABLE IF NOT EXISTS orders (
   cashier_id BIGINT UNSIGNED NOT NULL,
   fachschaft TINYINT(1) NOT NULL DEFAULT 0,
   event_id BIGINT UNSIGNED NOT NULL,
+  stand_id BIGINT UNSIGNED NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   client_uuid CHAR(36) NULL,
   UNIQUE KEY uq_orders_client_uuid (client_uuid),
+  INDEX idx_orders_event_stand (event_id, stand_id),
   FOREIGN KEY (cashier_id) REFERENCES cashiers(id) ON DELETE CASCADE,
-  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+  CONSTRAINT fk_orders_stand FOREIGN KEY (stand_id) REFERENCES stands(id)
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -182,10 +201,12 @@ CREATE TABLE IF NOT EXISTS donations (
   cashier_id BIGINT UNSIGNED NOT NULL,
   amount DECIMAL(10,2) NOT NULL,
   order_id BIGINT UNSIGNED NULL,
+  stand_id BIGINT UNSIGNED NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   client_uuid CHAR(36) NULL,
   UNIQUE KEY uq_donations_client_uuid (client_uuid),
   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
   FOREIGN KEY (cashier_id) REFERENCES cashiers(id) ON DELETE CASCADE,
-  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
+  CONSTRAINT fk_donations_stand FOREIGN KEY (stand_id) REFERENCES stands(id)
 );

@@ -41,7 +41,8 @@
 
           <template #mobile-meta="{ row }">
             <span class="truncate">
-              {{ t('history.cashier', { name: row.cashier }) }} — {{ formatDateTime(row.created_at) }}
+              {{ t('history.cashier', { name: row.cashier }) }}<template v-if="row.stand"> · {{ t('history.standLabel', { name: row.stand }) }}</template>
+              — {{ formatDateTime(row.created_at) }}
             </span>
             <CommonStatusBadge
               v-if="row.is_fachschaft"
@@ -118,7 +119,10 @@ function orderTotal(order: any) {
     .reduce((s: number, i: any) => s + (Number(i.price) + Number(i.deposit)) * Number(i.quantity), 0)
 }
 
-const columns: AdvancedTableColumn<any>[] = [
+// The stand column only appears once an order of this event has a stand
+const hasStands = computed(() => orders.value.some(order => order.stand))
+
+const columns = computed<AdvancedTableColumn<any>[]>(() => [
   {
     key: 'id',
     label: t('users.id'),
@@ -131,6 +135,14 @@ const columns: AdvancedTableColumn<any>[] = [
     globalSearchable: true,
     getValue: order => order.cashier,
   },
+  ...(hasStands.value
+    ? [{
+        key: 'stand',
+        label: t('history.stand'),
+        globalSearchable: true,
+        getValue: (order: any) => order.stand ?? '',
+      }]
+    : []),
   {
     key: 'created_at',
     label: t('users.createdAt'),
@@ -152,7 +164,7 @@ const columns: AdvancedTableColumn<any>[] = [
     globalSearchable: true,
     getValue: order => order.is_fachschaft ? t('history.fachschaftBadge') : t('history.typeSale'),
   },
-]
+])
 
 function openOrder(order: any) {
   openedOrder.value = order

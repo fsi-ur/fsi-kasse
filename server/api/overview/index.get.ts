@@ -35,6 +35,22 @@ function fillHourlyGaps(rows: Array<{ hour_start: string, revenue: unknown, quan
   return result
 }
 
+interface StandFilter {
+  orders: string
+  donations: string
+  params: unknown[]
+}
+
+function parseStandFilter(value: unknown): StandFilter | null {
+  const raw = value == null ? '' : String(value)
+  if (raw === '' || raw === 'all') return { orders: '', donations: '', params: [] }
+  if (raw === 'none') return { orders: ' AND o.stand_id IS NULL', donations: ' AND stand_id IS NULL', params: [] }
+
+  const id = Number(raw)
+  if (!Number.isInteger(id) || id <= 0) return null
+  return { orders: ' AND o.stand_id = ?', donations: ' AND stand_id = ?', params: [id] }
+}
+
 export default defineEventHandler(async (event) => {
   const current = await requirePermission(event, 'cash_register.manage')
   if (!current.ok) return current
@@ -42,6 +58,11 @@ export default defineEventHandler(async (event) => {
   const eventId = Number(getQuery(event).eventId)
   if (!eventId) {
     return { ok: false, error: 'Missing eventId' }
+  }
+
+  const stand = parseStandFilter(getQuery(event).standId)
+  if (!stand) {
+    return { ok: false, error: 'Invalid standId' }
   }
 
   // All aggregates value the order lines through their own snapshot columns —
@@ -56,10 +77,10 @@ export default defineEventHandler(async (event) => {
     JOIN order_items oi ON o.id = oi.order_id
     LEFT JOIN items i ON oi.item_id = i.id
     WHERE o.fachschaft = 0
-      AND o.event_id = ?
+      AND o.event_id = ?${stand.orders}
     GROUP BY oi.item_id
     ORDER BY name ASC
-  `, [eventId]))
+  `, [eventId, ...stand.params]))
 
   const regularItems = normalizeBigInt(regularRows)
   const totalRevenue = regularItems.reduce((sum: number, item: any) => sum + Number(item.revenue), 0)
@@ -76,10 +97,10 @@ export default defineEventHandler(async (event) => {
     JOIN order_items oi ON o.id = oi.order_id
     LEFT JOIN items i ON oi.item_id = i.id
     WHERE o.fachschaft = 1
-      AND o.event_id = ?
+      AND o.event_id = ?${stand.orders}
     GROUP BY oi.item_id
     ORDER BY name ASC
-  `, [eventId]))
+  `, [eventId, ...stand.params]))
 
   const fachschaftItems = normalizeBigInt(fachschaftRows)
   const fachschaftTotalWorth = fachschaftItems.reduce((sum: number, item: any) => sum + Number(item.worth), 0)
@@ -92,10 +113,10 @@ export default defineEventHandler(async (event) => {
     FROM orders o
     JOIN order_items oi ON o.id = oi.order_id
     WHERE o.fachschaft = 0
-      AND o.event_id = ?
+      AND o.event_id = ?${stand.orders}
     GROUP BY hour_start
     ORDER BY hour_start ASC
-  `, [eventId]))
+  `, [eventId, ...stand.params]))
 
   const hourly = fillHourlyGaps(hourlyRows)
 
@@ -128,8 +149,8 @@ export default defineEventHandler(async (event) => {
     JOIN order_items oi ON o.id = oi.order_id
     WHERE o.fachschaft = 0
       AND o.created_at >= NOW() - INTERVAL 1 HOUR
-      AND o.event_id = ?
-  `, [eventId]))
+      AND o.event_id = ?${stand.orders}
+  `, [eventId, ...stand.params]))
 
   const prevHourRows = normalizeBigInt(await query(`
     SELECT
@@ -139,8 +160,8 @@ export default defineEventHandler(async (event) => {
     JOIN order_items oi ON o.id = oi.order_id
     WHERE o.fachschaft = 0
       AND o.created_at BETWEEN NOW() - INTERVAL 2 HOUR AND NOW() - INTERVAL 1 HOUR
-      AND o.event_id = ?
-  `, [eventId]))
+      AND o.event_id = ?${stand.orders}
+  `, [eventId, ...stand.params]))
 
   const lastHourRevenue = Number(lastHourRows[0]?.revenue ?? 0)
   const lastHourQuantity = Number(lastHourRows[0]?.quantity ?? 0)
@@ -150,11 +171,64 @@ export default defineEventHandler(async (event) => {
   const donationRows = normalizeBigInt(await query(`
     SELECT COUNT(*) AS count, IFNULL(SUM(amount), 0) AS total
     FROM donations
-    WHERE event_id = ?
-  `, [eventId]))
+    WHERE event_id = ?${stand.donations}
+  `, [eventId, ...stand.params]))
 
   const donationCount = Number(donationRows[0]?.count ?? 0)
   const donationTotal = Number(donationRows[0]?.total ?? 0)
+
+  const standSalesRows = await query<Array<{ id: unknown, orders: unknown, quantity: unknown, revenue: unknown }>>(`
+    SELECT
+      o.stand_id AS id,
+      COUNT(DISTINCT o.id) AS orders,
+      SUM(oi.quantity) AS quantity,
+      SUM(oi.quantity * (oi.unit_price + oi.unit_deposit)) AS revenue
+    FROM orders o
+    JOIN order_items oi ON oi.order_id = o.id
+    WHERE o.fachschaft = 0
+      AND o.event_id = ?
+    GROUP BY o.stand_id
+  `, [eventId])
+
+  const standDonationRows = await query<Array<{ id: unknown, total: unknown }>>(`
+    SELECT stand_id AS id, SUM(amount) AS total
+    FROM donations
+    WHERE event_id = ?
+    GROUP BY stand_id
+  `, [eventId])
+
+  const standNameRows = await query<Array<{ id: unknown, name: unknown }>>(`SELECT id, name FROM stands`)
+  const standNames = new Map(standNameRows.map(row => [Number(row.id), String(row.name)]))
+
+  const standKey = (id: unknown) => id == null ? null : Number(id)
+  const standsById = new Map<number | null, {
+    id: number | null
+    name: string | null
+    orders: number
+    quantity: number
+    revenue: number
+    donations: number
+  }>()
+  const standEntry = (id: number | null) => {
+    let entry = standsById.get(id)
+    if (!entry) {
+      entry = { id, name: id == null ? null : (standNames.get(id) ?? null), orders: 0, quantity: 0, revenue: 0, donations: 0 }
+      standsById.set(id, entry)
+    }
+    return entry
+  }
+
+  for (const row of standSalesRows) {
+    const entry = standEntry(standKey(row.id))
+    entry.orders = Number(row.orders ?? 0)
+    entry.quantity = Number(row.quantity ?? 0)
+    entry.revenue = Number(row.revenue ?? 0)
+  }
+  for (const row of standDonationRows) {
+    standEntry(standKey(row.id)).donations = Number(row.total ?? 0)
+  }
+
+  const stands = [...standsById.values()].sort((a, b) => b.revenue - a.revenue)
 
   return {
     ok: true,
@@ -176,6 +250,7 @@ export default defineEventHandler(async (event) => {
       count: donationCount,
       total: donationTotal,
     },
+    stands,
     lastHour: {
       revenue: lastHourRevenue,
       quantity: lastHourQuantity,

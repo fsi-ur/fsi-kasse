@@ -9,6 +9,7 @@ const steps = [
   { label: 'must change password migration', command: 'node', args: ['scripts/migrate-must-change-password.mjs'], required: true, attempts: 6 },
   { label: 'client uuid migration', command: 'node', args: ['scripts/migrate-add-client-uuid.mjs'], required: true, attempts: 6 },
   { label: 'guests and affiliations migration', command: 'node', args: ['scripts/migrate-guests-and-affiliations.mjs'], required: true, attempts: 6 },
+  { label: 'stands migration', command: 'node', args: ['scripts/migrate-stands.mjs'], required: true, attempts: 6 },
   { label: 'admin seed', command: 'node', args: ['scripts/seed-admin.mjs'], required: true, attempts: 6 },
   { label: 'connection database user', command: 'node', args: ['scripts/create-connection-db-user.mjs'], required: false },
 ]

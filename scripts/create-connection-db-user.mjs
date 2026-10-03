@@ -26,6 +26,7 @@ const SELECT_TABLES = [
   'donations',
   'item_price_history',
   'app_settings_history',
+  'stands',
 ]
 
 if (!CONNECTION_DB_USER || !CONNECTION_DB_PASSWORD) {

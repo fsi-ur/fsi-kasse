@@ -31,6 +31,7 @@
 
         <div class="text-xs text-base-500">
           {{ entry.display.cashierName }} · {{ entry.display.eventName }} ·
+          <template v-if="entry.display.standName">{{ entry.display.standName }} ·</template>
           {{ t('offline.queuedAt', { time: formatDateTime(new Date(entry.queued_at).toISOString()) }) }}
         </div>
 

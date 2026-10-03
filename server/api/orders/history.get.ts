@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
       o.created_at,
       c.id AS cashier_id,
       c.name AS cashier_name,
+      s.name AS stand_name,
       oi.id AS line_id,
       oi.item_id,
       COALESCE(i.name, oi.item_name) AS item_name,
@@ -29,6 +30,7 @@ export default defineEventHandler(async (event) => {
     JOIN cashiers c ON o.cashier_id = c.id
     JOIN order_items oi ON o.id = oi.order_id
     LEFT JOIN items i ON oi.item_id = i.id
+    LEFT JOIN stands s ON s.id = o.stand_id
     WHERE o.event_id = ?
     ORDER BY o.created_at DESC, o.id DESC
   `, [eventId])
@@ -43,6 +45,7 @@ export default defineEventHandler(async (event) => {
       order = {
         id: row.order_id,
         cashier: row.cashier_name,
+        stand: row.stand_name ?? null,
         is_fachschaft: row.fachschaft,
         created_at: row.created_at,
         items: []

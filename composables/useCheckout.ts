@@ -10,6 +10,8 @@ function nonNegativeAmount(stored: unknown) {
 export const useCheckout = () => {
   const selectedCashier = usePersistedState<number | string>('selectedCashier', () => '', positiveIdOrEmpty)
   const selectedEvent = usePersistedState<number | string>('selectedEvent', () => '', positiveIdOrEmpty)
+  const selectedStand = usePersistedState<number | string>('selectedStand', () => '', positiveIdOrEmpty)
+  const showAllItems = usePersistedState<boolean>('showAllItems', () => false, stored => stored === true)
   const orderItems = usePersistedState<any[]>('orderItems', () => [], stored => Array.isArray(stored) ? stored : undefined)
   const isFachschaft = usePersistedState<boolean>('isFachschaft', () => false, stored => stored === true)
   const donationMode = usePersistedState<DonationMode>('donationMode', () => null,
@@ -21,6 +23,6 @@ export const useCheckout = () => {
 
   return {
     selectedCashier, selectedEvent, selectedCashierName, selectedEventName, orderItems, isFachschaft,
-    donationMode, directDonation, paidAmount,
+    donationMode, directDonation, paidAmount, selectedStand, showAllItems,
   }
 }

@@ -12,6 +12,7 @@ import {
   round2,
   validateCashierAndEvent,
 } from '~/server/utils/checkout'
+import { resolveStandId } from '~/server/utils/stands'
 
 type DonationInput =
   | null
@@ -77,6 +78,8 @@ export default defineEventHandler(async (event) => {
   const invalid = await validateCashierAndEvent(cashierId, eventId)
   if (invalid) return invalid
 
+  const standId = await resolveStandId(body?.stand_id)
+
   const resolved = await resolveBookedLines(lines)
   if (!resolved.ok) return resolved
   const booked = resolved.booked
@@ -100,8 +103,8 @@ export default defineEventHandler(async (event) => {
 
       if (booked.length > 0) {
         const result = await query(
-          `INSERT INTO orders (cashier_id, event_id, fachschaft, client_uuid) VALUES (?, ?, ?, ?)`,
-          [cashierId, eventId, isFachschaft ? 1 : 0, clientUuid],
+          `INSERT INTO orders (cashier_id, event_id, stand_id, fachschaft, client_uuid) VALUES (?, ?, ?, ?, ?)`,
+          [cashierId, eventId, standId, isFachschaft ? 1 : 0, clientUuid],
           conn,
         )
 
@@ -119,8 +122,8 @@ export default defineEventHandler(async (event) => {
 
       if (donationAmount > 0) {
         await query(
-          `INSERT INTO donations (event_id, cashier_id, amount, order_id, client_uuid) VALUES (?, ?, ?, ?, ?)`,
-          [eventId, cashierId, donationAmount.toFixed(2), orderId, clientUuid],
+          `INSERT INTO donations (event_id, cashier_id, stand_id, amount, order_id, client_uuid) VALUES (?, ?, ?, ?, ?, ?)`,
+          [eventId, cashierId, standId, donationAmount.toFixed(2), orderId, clientUuid],
           conn,
         )
       }

@@ -1,7 +1,20 @@
 <template>
   <Page :headline1="t('overview.title')" @open-menu="$emit('openMenu')">
     <template #header>
-      <MenuSelectEvent class="ml-auto" />
+      <div class="ml-auto flex flex-col gap-2 md:flex-row md:gap-4">
+        <MenuSelectEvent />
+        <div v-if="showStandFilter" class="w-40 md:w-52">
+          <CommonSearchSelect
+            v-model="standQuery"
+            :options="standOptions"
+            :placeholder="t('overview.standFilter')"
+            :empty-text="t('select.noStands')"
+            :selected-label="selectedStandLabel"
+            @select="onStandSelect"
+            @clear-selection="overviewStand = 'all'"
+          />
+        </div>
+      </div>
     </template>
 
     <template #cards>
@@ -52,7 +65,7 @@
           </div>
         </div>
 
-        <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
+        <div v-if="!standFilterActive" class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
           <h2 class="text-lg font-semibold mb-4">{{ t('overview.fachschaftPayments') }}</h2>
 
           <div class="flex justify-between">
@@ -88,17 +101,32 @@
         </div>
 
         <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
-          <h2 class="text-lg font-semibold mb-2">{{ t('overview.totalIncome') }}</h2>
-          <div class="text-3xl font-bold text-accent-600">
-            {{ formatCurrency(data.regular.totalRevenue + data.payments.revenue + data.donations.total) }}
-          </div>
-          <div class="mt-1 text-sm text-base-500">
-            {{ t('overview.totalIncomeBreakdown', {
-              sales: formatCurrency(data.regular.totalRevenue),
-              payments: formatCurrency(data.payments.revenue),
-              donations: formatCurrency(data.donations.total)
-            }) }}
-          </div>
+          <template v-if="standFilterActive">
+            <h2 class="text-lg font-semibold mb-2">{{ t('overview.totalIncomeStand') }}</h2>
+            <div class="text-3xl font-bold text-accent-600">
+              {{ formatCurrency(data.regular.totalRevenue + data.donations.total) }}
+            </div>
+            <div class="mt-1 text-sm text-base-500">
+              {{ t('overview.totalIncomeStandBreakdown', {
+                sales: formatCurrency(data.regular.totalRevenue),
+                donations: formatCurrency(data.donations.total)
+              }) }}
+            </div>
+          </template>
+
+          <template v-else>
+            <h2 class="text-lg font-semibold mb-2">{{ t('overview.totalIncome') }}</h2>
+            <div class="text-3xl font-bold text-accent-600">
+              {{ formatCurrency(data.regular.totalRevenue + data.payments.revenue + data.donations.total) }}
+            </div>
+            <div class="mt-1 text-sm text-base-500">
+              {{ t('overview.totalIncomeBreakdown', {
+                sales: formatCurrency(data.regular.totalRevenue),
+                payments: formatCurrency(data.payments.revenue),
+                donations: formatCurrency(data.donations.total)
+              }) }}
+            </div>
+          </template>
         </div>
 
         <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
@@ -127,6 +155,48 @@
               </span>
             </span>
           </div>
+        </div>
+
+        <div v-if="showStandFilter" class="col-span-12 bg-white p-4 rounded-xl shadow-lg">
+          <h2 class="text-lg font-semibold mb-4">{{ t('overview.standComparison') }}</h2>
+
+          <div class="hidden md:grid grid-cols-[minmax(0,1fr)_6rem_6rem_7rem_7rem] gap-4 text-xs text-base-500 pb-1 border-b border-base-200">
+            <span>{{ t('overview.standFilter') }}</span>
+            <span class="text-right">{{ t('overview.orders') }}</span>
+            <span class="text-right">{{ t('overview.itemsSold') }}</span>
+            <span class="text-right">{{ t('overview.revenue') }}</span>
+            <span class="text-right">{{ t('overview.donations') }}</span>
+          </div>
+
+          <ul>
+            <li v-for="row in standRows" :key="row.key">
+              <button
+                type="button"
+                class="w-full text-left px-1 py-2 border-b border-base-200 cursor-pointer transition-colors hover:bg-base-50"
+                :class="row.filterValue === overviewStand ? 'bg-base-100' : ''"
+                @click="overviewStand = row.filterValue"
+              >
+                <div class="grid grid-cols-2 md:grid-cols-[minmax(0,1fr)_6rem_6rem_7rem_7rem] gap-x-4 gap-y-1 text-sm">
+                  <span class="col-span-2 md:col-span-1 truncate font-semibold">{{ row.label }}</span>
+                  <span class="md:text-right">
+                    <span class="md:hidden text-base-500">{{ t('overview.orders') }}: </span>{{ row.orders }}
+                  </span>
+                  <span class="text-right">
+                    <span class="md:hidden text-base-500">{{ t('overview.itemsSold') }}: </span>{{ row.quantity }} {{ t('overview.pcs') }}
+                  </span>
+                  <span class="md:text-right">
+                    <span class="md:hidden text-base-500">{{ t('overview.revenue') }}: </span>{{ row.revenueLabel }}
+                  </span>
+                  <span class="text-right text-accent-600">
+                    <span class="md:hidden text-base-500">{{ t('overview.donations') }}: </span>{{ row.donationsLabel }}
+                  </span>
+                </div>
+                <div class="mt-1 h-2 rounded-full bg-base-100">
+                  <div class="h-2 rounded-full bg-accent-500" :style="{ width: `${row.barPercent}%` }"></div>
+                </div>
+              </button>
+            </li>
+          </ul>
         </div>
 
         <div class="col-span-12 bg-white p-4 rounded-xl shadow-lg">
@@ -176,6 +246,8 @@ import { useAppRefresh } from '~/composables/useAppRefresh'
 import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
 import { cachedFetch } from '~/composables/useCachedFetch'
 import { onOfflineDataChanged } from '~/composables/useOfflineQueue'
+import { usePersistedState } from '~/composables/usePersistedState'
+import type { SearchSelectOption } from '~/components/Common/SearchSelect.vue'
 
 const { selectedEvent } = useCheckout()
 const { t } = useI18n()
@@ -192,6 +264,75 @@ const stale = ref(false)
 const cachedAt = ref<number | null>(null)
 
 const MAX_BAR_HEIGHT = 160
+
+type OverviewStandFilter = 'all' | 'none' | number
+
+// Local to the overview: whoever reads the stats is not standing at a stand,
+// so this is deliberately separate from the checkout's selectedStand.
+const overviewStand = usePersistedState<OverviewStandFilter>('overviewStand', () => 'all', (stored) => {
+  if (stored === 'all' || stored === 'none') return stored
+  return Number(stored) > 0 ? Number(stored) : undefined
+})
+const standQuery = ref('')
+
+interface StandStat {
+  id: number | null
+  name: string | null
+  orders: number
+  quantity: number
+  revenue: number
+  donations: number
+}
+
+// Always covers the whole event, independent of the filter.
+const standStats = computed<StandStat[]>(() => data.value?.stands ?? [])
+// Events without stand sales show no stand UI, like the checkout without active stands.
+const showStandFilter = computed(() => standStats.value.some(stand => stand.id != null))
+const standFilterActive = computed(() => showStandFilter.value && overviewStand.value !== 'all')
+
+function standLabel(stand: StandStat) {
+  if (stand.id == null) return t('overview.noStand')
+  return stand.name ?? `#${stand.id}`
+}
+
+function standFilterValue(stand: StandStat): OverviewStandFilter {
+  return stand.id == null ? 'none' : stand.id
+}
+
+const standOptions = computed<SearchSelectOption[]>(() => [
+  { key: 'all', label: t('overview.allStands'), value: 'all' },
+  ...standStats.value.map(stand => ({
+    key: String(standFilterValue(stand)),
+    label: standLabel(stand),
+    value: standFilterValue(stand),
+  })),
+])
+
+const selectedStandLabel = computed(() =>
+  standOptions.value.find(option => option.value === overviewStand.value)?.label ?? '')
+
+function onStandSelect(value: unknown) {
+  overviewStand.value = value as OverviewStandFilter
+  standQuery.value = ''
+}
+
+const standRows = computed(() => {
+  const max = standStats.value.reduce((highest, stand) => Math.max(highest, Number(stand.revenue)), 0)
+
+  return standStats.value.map((stand) => {
+    const revenue = Number(stand.revenue)
+    return {
+      key: String(standFilterValue(stand)),
+      filterValue: standFilterValue(stand),
+      label: standLabel(stand),
+      orders: Number(stand.orders),
+      quantity: Number(stand.quantity),
+      revenueLabel: formatCurrency(revenue),
+      donationsLabel: formatCurrency(Number(stand.donations)),
+      barPercent: max > 0 ? Math.max(revenue > 0 ? 1 : 0, revenue / max * 100) : 0,
+    }
+  })
+})
 
 const hourly = computed<any[]>(() => data.value?.hourly ?? [])
 const paymentAmounts = computed<Array<{ amount: number, count: number }>>(() => data.value?.payments?.amounts ?? [])
@@ -241,10 +382,17 @@ async function loadOverview() {
 
   loading.value = true
   try {
-    const result = await cachedFetch<any>(`/api/overview?eventId=${selectedEvent.value}`)
+    const standId = encodeURIComponent(String(overviewStand.value))
+    const result = await cachedFetch<any>(`/api/overview?eventId=${selectedEvent.value}&standId=${standId}`)
     stale.value = result.stale
     cachedAt.value = result.cachedAt
-    if (result.data.ok) data.value = result.data
+    if (result.data.ok) {
+      data.value = result.data
+      if (overviewStand.value !== 'all' && (!showStandFilter.value
+        || !standOptions.value.some(option => option.value === overviewStand.value))) {
+        overviewStand.value = 'all'
+      }
+    }
   } catch {
     data.value = null
     stale.value = true
@@ -254,7 +402,7 @@ async function loadOverview() {
   }
 }
 
-watch(selectedEvent, () => {
+watch([selectedEvent, overviewStand], () => {
   loadOverview()
 })
 

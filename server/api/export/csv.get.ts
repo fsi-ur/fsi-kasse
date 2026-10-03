@@ -13,6 +13,7 @@ export default defineEventHandler(async (event) => {
       o.created_at,
       o.fachschaft,
       c.name AS cashier,
+      s.name AS stand,
       COALESCE(i.name, oi.item_name) AS item,
       oi.quantity,
       oi.unit_price AS price,
@@ -22,6 +23,7 @@ export default defineEventHandler(async (event) => {
     JOIN order_items oi ON oi.order_id = o.id
     LEFT JOIN items i ON oi.item_id = i.id
     JOIN events e ON e.id = o.event_id
+    LEFT JOIN stands s ON s.id = o.stand_id
     ORDER BY o.created_at DESC
   `)
 
@@ -46,15 +48,17 @@ export default defineEventHandler(async (event) => {
       e.name AS event,
       d.created_at,
       c.name AS cashier,
+      s.name AS stand,
       d.amount,
       d.order_id
     FROM donations d
     JOIN cashiers c ON d.cashier_id = c.id
+    LEFT JOIN stands s ON s.id = d.stand_id
     JOIN events e ON d.event_id = e.id
     ORDER BY d.created_at DESC
   `)
 
-  let csv = 'Order ID,Event,Date,Cashier,Fachschaft,Item,Quantity,Price,Deposit,Total'
+  let csv = 'Order ID,Event,Date,Cashier,Stand,Fachschaft,Item,Quantity,Price,Deposit,Total'
 
   for (const row of orderRows as any[]) {
     const total =
@@ -67,6 +71,7 @@ export default defineEventHandler(async (event) => {
       `"${row.event}"`,
       new Date(row.created_at).toISOString(),
       `"${row.cashier}"`,
+      row.stand ? `"${row.stand}"` : '',
       row.fachschaft,
       `"${row.item}"`,
       row.quantity,
@@ -89,7 +94,7 @@ export default defineEventHandler(async (event) => {
     ].join(',')}`
   }
 
-  csv += '\n\nDonation ID,Event,Date,Cashier,Amount,Linked Order ID'
+  csv += '\n\nDonation ID,Event,Date,Cashier,Stand,Amount,Linked Order ID'
 
   for (const row of donationRows as any[]) {
     csv += `\n${[
@@ -97,6 +102,7 @@ export default defineEventHandler(async (event) => {
       `"${row.event}"`,
       new Date(row.created_at).toISOString(),
       `"${row.cashier}"`,
+      row.stand ? `"${row.stand}"` : '',
       Number(row.amount).toFixed(2),
       row.order_id ?? ''
     ].join(',')}`
