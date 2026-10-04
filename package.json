@@ -18,6 +18,7 @@
     "setup:migrate:client-uuid": "node --env-file=.env scripts/migrate-add-client-uuid.mjs",
     "setup:migrate:guests": "node --env-file=.env scripts/migrate-guests-and-affiliations.mjs",
     "setup:migrate:stands": "node --env-file=.env scripts/migrate-stands.mjs",
+    "setup:migrate:fachschaft-enabled": "node --env-file=.env scripts/migrate-fachschaft-enabled.mjs",
     "setup:migrate:users-to-accounting": "node --env-file=.env scripts/migrate-users-to-accounting.mjs",
     "setup:migrate:cashiers-to-accounting": "node --env-file=.env scripts/migrate-cashiers-to-accounting-members.mjs",
     "setup:migrate:events-to-accounting": "node --env-file=.env scripts/migrate-events-to-accounting.mjs",

@@ -1,5 +1,6 @@
 export interface CashRegisterSettings {
   fachschaft_payment_amount: number
+  fachschaft_enabled: boolean
 }
 
 export interface CashRegisterSettingsResponse {

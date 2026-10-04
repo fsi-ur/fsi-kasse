@@ -13,6 +13,8 @@ import {
   validateCashierAndEvent,
 } from '~/server/utils/checkout'
 import { resolveStandId } from '~/server/utils/stands'
+import { getCashRegisterEventById } from '~/server/utils/events'
+import { getCashRegisterSettings } from '~/server/utils/appSettings'
 
 type DonationInput =
   | null
@@ -85,6 +87,12 @@ export default defineEventHandler(async (event) => {
   const booked = resolved.booked
 
   const isFachschaft = Boolean(body?.is_fachschaft) && booked.length > 0
+  if (isFachschaft) {
+    const fachschaftEvent = await getCashRegisterEventById(eventId)
+    if (!fachschaftEvent?.fachschaft_enabled || !(await getCashRegisterSettings()).fachschaft_enabled) {
+      return { ok: false, error: 'Fachschaft orders are disabled' }
+    }
+  }
   const total = bookedTotal(booked, isFachschaft)
 
   const donationAmount = !donation

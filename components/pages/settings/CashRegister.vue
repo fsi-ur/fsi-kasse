@@ -6,6 +6,14 @@
         <p class="text-sm text-base-600">{{ t('settings.cashRegisterText') }}</p>
       </div>
 
+      <label class="flex items-start gap-2 cursor-pointer">
+        <input v-model="fachschaftEnabled" type="checkbox" class="mt-1" :disabled="isSaving">
+        <span>
+          <span class="block font-medium">{{ t('settings.fachschaftEnabled') }}</span>
+          <span class="block text-sm text-base-600">{{ t('settings.fachschaftEnabledHelp') }}</span>
+        </span>
+      </label>
+
       <div class="field max-w-xs">
         <label for="fachschaft-amount">{{ t('settings.fachschaftPaymentAmount') }}</label>
         <input
@@ -229,6 +237,7 @@ const MAX_SNAPSHOT_UPLOAD_BYTES = 256 * 1024 * 1024
 const MAX_SNAPSHOT_UPLOAD_LABEL = '256 MB'
 
 const fachschaftAmount = ref('')
+const fachschaftEnabled = ref(true)
 const isSaving = ref(false)
 
 const snapshotPassword = ref('')
@@ -282,7 +291,9 @@ const canRestorePreview = computed(() => {
 
 async function reloadSettings() {
   const previousLoaded = String(settings.value.fachschaft_payment_amount)
+  const previousEnabled = settings.value.fachschaft_enabled
   await loadSettings(true)
+  if (fachschaftEnabled.value === previousEnabled) fachschaftEnabled.value = settings.value.fachschaft_enabled
   // Sync the form field only while it still shows the previously loaded value,
   // so a refresh never discards unsaved user input.
   if (!fachschaftAmount.value || fachschaftAmount.value === previousLoaded) {
@@ -306,7 +317,7 @@ async function saveSettings() {
   try {
     const res = await $fetch<{ ok: boolean, settings?: CashRegisterSettings, error?: string }>('/api/settings/save', {
       method: 'POST',
-      body: { fachschaft_payment_amount: amount },
+      body: { fachschaft_payment_amount: amount, fachschaft_enabled: fachschaftEnabled.value },
     })
 
     if (!res.ok) {
@@ -317,6 +328,7 @@ async function saveSettings() {
     if (res.settings) {
       settings.value = res.settings
       fachschaftAmount.value = String(res.settings.fachschaft_payment_amount)
+      fachschaftEnabled.value = res.settings.fachschaft_enabled
     }
     toast.success(t('settings.saved'))
   } catch {
@@ -609,6 +621,7 @@ async function restoreSnapshot() {
     await loadSettings(true)
     await useAppRefresh().refreshCurrentPage()
     fachschaftAmount.value = String(settings.value.fachschaft_payment_amount)
+    fachschaftEnabled.value = settings.value.fachschaft_enabled
 
     const user = await fetchSession()
     if (!user) {

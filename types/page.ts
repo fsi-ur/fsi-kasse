@@ -13,6 +13,7 @@ interface MainPage {
   requireAllPermissions?: boolean
   allowGuest?: boolean
   preserveOnRefresh?: boolean
+  feature?: 'fachschaft'
 }
 
 interface SubPage {
@@ -23,6 +24,7 @@ interface SubPage {
   requireAllPermissions?: boolean
   allowGuest?: boolean
   preserveOnRefresh?: boolean
+  feature?: 'fachschaft'
 }
 
 export type PageName = keyof typeof PAGES

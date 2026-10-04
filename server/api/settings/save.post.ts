@@ -1,6 +1,6 @@
 import { defineEventHandler, readBody } from 'h3'
 import { requirePermission } from '~/server/utils/api/guards'
-import { saveCashRegisterSettings } from '~/server/utils/appSettings'
+import { getCashRegisterSettings, saveCashRegisterSettings } from '~/server/utils/appSettings'
 import type { CashRegisterSettings } from '~/types/settings'
 
 export default defineEventHandler(async (event) => {
@@ -14,7 +14,15 @@ export default defineEventHandler(async (event) => {
     return { ok: false as const, error: 'Invalid fachschaft payment amount' }
   }
 
-  const settings = await saveCashRegisterSettings({ fachschaft_payment_amount: amount }, current.user?.username ?? null)
+  if (body?.fachschaft_enabled !== undefined && typeof body.fachschaft_enabled !== 'boolean') {
+    return { ok: false as const, error: 'Invalid fachschaft enabled flag' }
+  }
+
+  const previous = await getCashRegisterSettings()
+  const settings = await saveCashRegisterSettings({
+    fachschaft_payment_amount: amount,
+    fachschaft_enabled: body?.fachschaft_enabled ?? previous.fachschaft_enabled,
+  }, current.user?.username ?? null)
 
   return { ok: true as const, settings }
 })

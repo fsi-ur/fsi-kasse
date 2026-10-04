@@ -3,6 +3,7 @@ import { cachedFetch } from '~/composables/useCachedFetch'
 
 const FALLBACK_SETTINGS: CashRegisterSettings = {
   fachschaft_payment_amount: 10,
+  fachschaft_enabled: true,
 }
 
 export const useCashRegisterSettings = () => {

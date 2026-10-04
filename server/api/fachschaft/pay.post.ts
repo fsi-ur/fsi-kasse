@@ -74,11 +74,20 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'Selected event is not active' }
   }
 
+  if (!selectedEvent.fachschaft_enabled) {
+    return { ok: false, error: 'Fachschaft payments are disabled for this event' }
+  }
+
   if (requestedAmount !== null && !(await isKnownFachschaftPaymentAmount(requestedAmount))) {
     return { ok: false, error: 'Payment amount does not match any known Fachschaft amount' }
   }
 
-  const bookedAmount = requestedAmount ?? (await getCashRegisterSettings()).fachschaft_payment_amount
+  const settings = await getCashRegisterSettings()
+  if (!settings.fachschaft_enabled) {
+    return { ok: false, error: 'Fachschaft payments are disabled' }
+  }
+
+  const bookedAmount = requestedAmount ?? settings.fachschaft_payment_amount
 
   let result
   try {

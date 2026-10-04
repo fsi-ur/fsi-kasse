@@ -22,6 +22,8 @@ const { currentPage } = usePage()
 const { user, fetchSession, hasPermission, hasAllPermissions } = useAuth()
 const { refreshKey } = useAppRefresh()
 
+const { fachschaftEnabled } = useFachschaftAvailability()
+
 const loaded = ref(false)
 
 function handleVisibilityChange() {
@@ -48,6 +50,7 @@ const currentComponent = computed(() => {
   if (!user.value) return LoginPage
   if (user.value.must_change_password) return ChangePasswordRequiredPage
   if (!page) return CheckoutPage
+  if (page.feature === 'fachschaft' && !fachschaftEnabled.value) return CheckoutPage
   if (page.allowGuest) return page.component
   if (!page.permissions.length) return page.component
   if (page.requireAllPermissions ? hasAllPermissions(page.permissions) : hasPermission(page.permissions)) {

@@ -23,7 +23,7 @@
       :rows="displayItems"
       :columns="columns"
       :empty-text="emptyLabel"
-      :show-actions="!readOnly"
+      :show-actions="!readOnly || !!$slots['extra-actions']"
       :can-open-row="() => editable"
       @row-open="editItem($event)"
     >
@@ -50,11 +50,12 @@
           :toggle="() => toggleActive(row)"
           :reload="loadItems"
         >
-          <button v-if="editable" class="text-link-600 hover:underline cursor-pointer" @click="editItem(row)">
+          <button v-if="editable && !readOnly" class="text-link-600 hover:underline cursor-pointer" @click="editItem(row)">
             {{ t('actions.edit') }}
           </button>
 
           <button
+            v-if="!readOnly"
             class="hover:underline cursor-pointer"
             :class="row.is_active ? 'text-danger-500' : 'text-base-500'"
             @click="toggleActive(row)"
@@ -63,13 +64,14 @@
           </button>
 
           <button
-            v-if="deleteEndpoint"
+            v-if="deleteEndpoint && !readOnly"
             class="text-danger-600 hover:underline cursor-pointer"
             @click="itemToDelete = row"
           >
             {{ t('actions.remove') }}
           </button>
         </slot>
+        <slot name="extra-actions" :item="row" :reload="loadItems" />
       </template>
     </CommonAdvancedTable>
   </CommonPageTableCard>
@@ -212,6 +214,10 @@ defineSlots<{
     displayItems: SettingsEntityRow[]
     edit: () => void
     toggle: () => Promise<void>
+    reload: () => Promise<void>
+  }) => any
+  'extra-actions'?: (props: {
+    item: SettingsEntityRow
     reload: () => Promise<void>
   }) => any
   'modal-fields'?: (props: {

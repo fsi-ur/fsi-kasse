@@ -16,7 +16,7 @@
     :extra-columns="columns"
     :editable="false"
     :read-only="readOnly"
-    :read-only-notice="t('events.connectedNotice')"
+    :read-only-notice="`${t('events.connectedNotice')} ${t('events.fachschaftNotice')}`"
     :create-item="() => ({ name: '', starts_at: '', ends_at: '' })"
     :on-error="handleError"
   >
@@ -25,6 +25,16 @@
         :label="item.is_active ? t('common.active') : t('common.inactive')"
         :tone="item.is_active ? 'success' : 'baseMuted'"
       />
+    </template>
+
+    <template #extra-actions="{ item }">
+      <button
+        type="button"
+        class="hover:underline cursor-pointer text-info-600"
+        @click="toggleFachschaft(item)"
+      >
+        {{ fachschaftOn(item) ? t('events.fachschaftDisable') : t('events.fachschaftEnable') }}
+      </button>
     </template>
 
     <template #modal-fields="{ editingItem: entity }">
@@ -80,6 +90,14 @@ const columns: EntityManagerColumn[] = [
     format: item => formatLocalDateTime((item as any).ends_at),
   },
   {
+    key: 'fachschaft_enabled',
+    label: t('events.fachschaftColumn'),
+    filterable: false,
+    sortable: false,
+    getValue: item => fachschaftOn(item) ? t('events.fachschaftAllowed') : t('events.fachschaftBlocked'),
+    format: item => fachschaftOn(item) ? t('events.fachschaftAllowed') : t('events.fachschaftBlocked'),
+  },
+  {
     key: 'is_active',
     label: t('common.active'),
     filterable: false,
@@ -90,6 +108,26 @@ const columns: EntityManagerColumn[] = [
 
 function toDateInputValue(value: unknown): string | null {
   return typeof value === 'string' ? value : null
+}
+
+function fachschaftOn(item: unknown) {
+  return Boolean((item as { fachschaft_enabled?: unknown }).fachschaft_enabled)
+}
+
+async function toggleFachschaft(item: { id: number }) {
+  try {
+    const res = await $fetch<{ ok: boolean, error?: string }>('/api/events/fachschaft', {
+      method: 'POST',
+      body: { id: item.id, fachschaft_enabled: fachschaftOn(item) ? 0 : 1 },
+    })
+    if (!res.ok) {
+      toast.error(res.error || t('common.unknownError'))
+      return
+    }
+    await managerRef.value?.loadItems()
+  } catch {
+    toast.error(t('common.unknownError'))
+  }
 }
 
 function handleError(context: { message?: string }) {

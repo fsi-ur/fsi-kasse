@@ -82,6 +82,7 @@
             {{ t('common.total') }}: {{ formatCurrency(total) }}
           </div>
           <button
+            v-if="fachschaftEnabled"
             @click="isFachschaft = !isFachschaft"
             class="mt-4 px-4 py-2 rounded-md text-sm cursor-pointer transition-colors"
             :class="isFachschaft
@@ -217,6 +218,7 @@ const {
   donationMode, directDonation: directAmount, paidAmount, showAllItems,
 } = useCheckout()
 const { effectiveStand } = useStands()
+const { fachschaftEnabled } = useFachschaftAvailability()
 const { t } = useI18n()
 const { formatCurrency } = useLocaleFormatters()
 const toast = useToast()
@@ -301,6 +303,10 @@ function setDonationMode(mode: 'direct' | 'paid' | null) {
   paidRaw.value = ''
   paidFocused.value = false
 }
+
+watch(fachschaftEnabled, (enabled) => {
+  if (!enabled) isFachschaft.value = false
+}, { immediate: true })
 
 watch([() => orderItems.value.length, isFachschaft], ([count, fachschaft]) => {
   if (donationMode.value === 'paid' && (count === 0 || fachschaft)) setDonationMode(null)

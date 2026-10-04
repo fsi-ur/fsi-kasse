@@ -45,7 +45,7 @@
           </div>
         </div>
 
-        <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
+        <div v-if="showFachschaft" class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
           <h2 class="text-lg font-semibold mb-4">{{ t('overview.fachschaftGivenOut') }}</h2>
 
           <ul>
@@ -65,7 +65,7 @@
           </div>
         </div>
 
-        <div v-if="!standFilterActive" class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
+        <div v-if="showFachschaft && !standFilterActive" class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
           <h2 class="text-lg font-semibold mb-4">{{ t('overview.fachschaftPayments') }}</h2>
 
           <div class="flex justify-between">
@@ -101,8 +101,8 @@
         </div>
 
         <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
-          <template v-if="standFilterActive">
-            <h2 class="text-lg font-semibold mb-2">{{ t('overview.totalIncomeStand') }}</h2>
+          <template v-if="standFilterActive || !showFachschaft">
+            <h2 class="text-lg font-semibold mb-2">{{ t(standFilterActive ? 'overview.totalIncomeStand' : 'overview.totalIncome') }}</h2>
             <div class="text-3xl font-bold text-accent-600">
               {{ formatCurrency(data.regular.totalRevenue + data.donations.total) }}
             </div>
@@ -250,6 +250,7 @@ import { usePersistedState } from '~/composables/usePersistedState'
 import type { SearchSelectOption } from '~/components/Common/SearchSelect.vue'
 
 const { selectedEvent } = useCheckout()
+const { fachschaftEnabled } = useFachschaftAvailability()
 const { t } = useI18n()
 const { formatCurrency } = useLocaleFormatters()
 const { onRefresh } = useAppRefresh()
@@ -333,6 +334,11 @@ const standRows = computed(() => {
     }
   })
 })
+
+const showFachschaft = computed(() =>
+  fachschaftEnabled.value
+  || Number(data.value?.payments?.count ?? 0) > 0
+  || (data.value?.fachschaft?.items?.length ?? 0) > 0)
 
 const hourly = computed<any[]>(() => data.value?.hourly ?? [])
 const paymentAmounts = computed<Array<{ amount: number, count: number }>>(() => data.value?.payments?.amounts ?? [])

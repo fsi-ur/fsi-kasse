@@ -11,7 +11,7 @@ export const PAGES: Record<string, AppPage> = {
   Login: { main: true, labelKey: 'pages.login', component: LoginPage, icon: 'material-symbols:login-rounded', permissions: [], allowGuest: true },
   Checkout: { main: true, labelKey: 'pages.checkout', component: CheckoutPage, icon: 'material-symbols:shopping-cart-outline-rounded', permissions: ['cash_register.use'] },
   History: { main: true, labelKey: 'pages.history', component: HistoryPage, icon: 'material-symbols:history-rounded', permissions: ['cash_register.use'] },
-  Fachschaft: { main: true, labelKey: 'pages.fachschaft', component: FachschaftPage, icon: 'material-symbols:payments-outline-rounded', permissions: ['cash_register.use'] },
+  Fachschaft: { main: true, labelKey: 'pages.fachschaft', component: FachschaftPage, icon: 'material-symbols:payments-outline-rounded', permissions: ['cash_register.use'], feature: 'fachschaft' },
   Overview: { main: true, labelKey: 'pages.overview', component: OverviewPage, icon: 'material-symbols:monitoring-rounded', permissions: ['cash_register.manage'] },
   Settings: { main: true, labelKey: 'pages.settings', component: SettingsPage, icon: 'material-symbols:settings-rounded', permissions: ['cash_register.manage', 'cash_register.guest_manage'], preserveOnRefresh: true },
 }

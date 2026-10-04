@@ -28,11 +28,15 @@ const openMenu = ref(false)
 const menuCollapsed = ref(false)
 const desktopMediaQuery = ref<MediaQueryList | null>(null)
 
+const { fachschaftEnabled, loadAvailability } = useFachschaftAvailability()
+const { selectedEvent } = useCheckout()
+
 const menuItems = Object.entries(PAGES).map(([name, page]) => ({ name, ...page }))
 
 const filteredMenuItems = computed(() => {
   return menuItems.filter(it => {
     if (it.name === 'Login') return false
+    if (it.feature === 'fachschaft' && !fachschaftEnabled.value) return false
     if (it.allowGuest) return !user.value
     if (!user.value) return false
     if (!it.permissions.length) return true
@@ -69,6 +73,12 @@ function toggleDesktopMenu() {
   if (!desktopMediaQuery.value?.matches) return
   menuCollapsed.value = !menuCollapsed.value
 }
+
+watch([user, selectedEvent], () => {
+  if (user.value && !user.value.must_change_password) loadAvailability()
+}, { immediate: true })
+
+useAppRefresh().onRefresh(() => loadAvailability(true))
 
 onMounted(() => {
   fetchSession()

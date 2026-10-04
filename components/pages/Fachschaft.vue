@@ -10,6 +10,13 @@
     <template #cards>
       <CommonOfflineNotice v-if="stale" :variant="cachedAt ? 'stale' : 'noData'" :cached-at="cachedAt" />
 
+      <div
+        v-if="disabledReason"
+        class="col-span-12 p-4 bg-warning-50 text-warning-900 shadow-lg rounded-xl border border-warning-200 text-sm"
+      >
+        {{ disabledReason }}
+      </div>
+
       <div class="col-span-12 p-4 bg-white shadow-lg rounded-xl flex flex-wrap gap-4 items-end">
         <div class="field w-64">
           <label>{{ t('fachschaft.memberName') }}</label>
@@ -25,7 +32,7 @@
         </div>
         <button
           class="btn-primary"
-          :disabled="!selectedMember || !selectedCashier || !selectedEvent"
+          :disabled="!selectedMember || !selectedCashier || !selectedEvent || !!disabledReason"
           @click="openConfirm"
         >
           {{ t('fachschaft.markPaid', { amount: formattedAmount }) }}
@@ -124,6 +131,14 @@ const paymentRows = computed(() => {
   return [...queued, ...payments.value]
 })
 
+const eventFachschaftEnabled = ref(true)
+
+const disabledReason = computed(() => {
+  if (!settings.value.fachschaft_enabled) return t('fachschaft.disabledGlobal')
+  if (!eventFachschaftEnabled.value) return t('fachschaft.disabledEvent')
+  return ''
+})
+
 const formattedAmount = computed(() => formatCurrency(settings.value.fachschaft_payment_amount))
 
 const memberOptions = computed<SearchSelectOption[]>(() => members.value
@@ -192,9 +207,21 @@ async function loadMembers() {
   }
 }
 
+async function loadEventFlag() {
+  try {
+    const { data: res } = await cachedFetch<any>('/api/events')
+    if (!res.ok || !Array.isArray(res.events)) return
+    const current = res.events.find((entry: any) => entry.id === selectedEvent.value)
+    eventFachschaftEnabled.value = current ? Boolean(current.fachschaft_enabled) : true
+  } catch {
+    // keep the last known value
+  }
+}
+
 async function reload() {
   await Promise.allSettled([
     loadSettings(true),
+    loadEventFlag(),
     loadMembers(),
     loadPayments(),
   ])
@@ -207,7 +234,8 @@ onOfflineDataChanged(reload)
 // Refresh the setting first so the confirmation names the amount that will
 // actually be booked, even if another session just changed it.
 async function openConfirm() {
-  await loadSettings(true)
+  await Promise.allSettled([loadSettings(true), loadEventFlag()])
+  if (disabledReason.value) return
   showConfirm.value = true
 }
 
@@ -263,6 +291,7 @@ async function loadPayments() {
 }
 
 watch(selectedEvent, () => {
+  loadEventFlag()
   paymentsLoading.value = true
   loadPayments()
 })
