@@ -22,11 +22,17 @@
           :columns="columns"
           :empty-text="t('history.noOrders')"
           :show-actions="false"
+          :row-key="entryKey"
           @row-open="openOrder"
         >
           <template #cell-type="{ row }">
             <CommonStatusBadge
-              v-if="row.is_fachschaft"
+              v-if="isDonationOnly(row)"
+              :label="t('history.typeDonation')"
+              tone="warning"
+            />
+            <CommonStatusBadge
+              v-else-if="row.is_fachschaft"
               :label="t('history.fachschaftBadge')"
               tone="success"
             />
@@ -35,8 +41,8 @@
 
           <!-- Compact cards read as a receipt line, not as a list of table cells. -->
           <template #mobile-title="{ row }">
-            {{ t('history.order', { id: row.id }) }} — {{ t('common.total') }}:
-            {{ formatCurrency(row.is_fachschaft ? 0 : orderTotal(row)) }}
+            {{ entryTitle(row) }} — {{ t('common.total') }}:
+            {{ formatCurrency(entryTotal(row)) }}
           </template>
 
           <template #mobile-meta="{ row }">
@@ -45,7 +51,12 @@
               — {{ formatDateTime(row.created_at) }}
             </span>
             <CommonStatusBadge
-              v-if="row.is_fachschaft"
+              v-if="isDonationOnly(row)"
+              :label="t('history.typeDonation')"
+              tone="warning"
+            />
+            <CommonStatusBadge
+              v-else-if="row.is_fachschaft"
               :label="t('history.fachschaftBadge')"
               tone="success"
             />
@@ -55,7 +66,7 @@
     </template>
   </Page>
 
-  <CommonModal v-model="showOrderModal" :title="openedOrder ? t('history.order', { id: openedOrder.id }) : ''">
+  <CommonModal v-model="showOrderModal" :title="openedOrder ? entryTitle(openedOrder) : ''">
     <ul v-if="openedOrder">
       <li
         v-for="item in openedOrder.items"
@@ -77,8 +88,13 @@
       </li>
     </ul>
 
+    <div v-if="openedOrder && openedOrder.donation > 0" class="flex justify-between py-2 border-b border-base-200">
+      <span>{{ t('history.donation') }}</span>
+      <span>{{ formatCurrency(openedOrder.donation) }}</span>
+    </div>
+
     <div v-if="openedOrder" class="text-right font-bold mt-3">
-      {{ t('common.total') }}: {{ formatCurrency(orderTotal(openedOrder)) }}
+      {{ t('common.total') }}: {{ formatCurrency(entryTotal(openedOrder)) }}
     </div>
 
     <template #footer>
@@ -119,6 +135,26 @@ function orderTotal(order: any) {
     .reduce((s: number, i: any) => s + (Number(i.price) + Number(i.deposit)) * Number(i.quantity), 0)
 }
 
+// Direct donations have no order and show up as their own history entry
+function isDonationOnly(entry: any) {
+  return entry.id == null
+}
+
+function entryKey(entry: any) {
+  return isDonationOnly(entry) ? `donation-${entry.donation_id}` : `order-${entry.id}`
+}
+
+function entryTitle(entry: any) {
+  return isDonationOnly(entry)
+    ? t('history.donationEntry', { id: entry.donation_id })
+    : t('history.order', { id: entry.id })
+}
+
+// Sale total (free for Fachschaft orders) plus the donation paid on top
+function entryTotal(entry: any) {
+  return (entry.is_fachschaft ? 0 : orderTotal(entry)) + Number(entry.donation ?? 0)
+}
+
 // The stand column only appears once an order of this event has a stand
 const hasStands = computed(() => orders.value.some(order => order.stand))
 
@@ -127,7 +163,8 @@ const columns = computed<AdvancedTableColumn<any>[]>(() => [
     key: 'id',
     label: t('users.id'),
     filterType: 'number',
-    getValue: order => order.id,
+    getValue: order => order.id ?? '',
+    format: order => isDonationOnly(order) ? '–' : String(order.id),
   },
   {
     key: 'cashier',
@@ -154,15 +191,17 @@ const columns = computed<AdvancedTableColumn<any>[]>(() => [
     key: 'total',
     label: t('common.total'),
     filterType: 'number',
-    getValue: order => order.is_fachschaft ? 0 : orderTotal(order),
-    format: order => formatCurrency(order.is_fachschaft ? 0 : orderTotal(order)),
+    getValue: order => entryTotal(order),
+    format: order => formatCurrency(entryTotal(order)),
   },
   {
     key: 'type',
     label: t('history.type'),
     filterable: true,
     globalSearchable: true,
-    getValue: order => order.is_fachschaft ? t('history.fachschaftBadge') : t('history.typeSale'),
+    getValue: order => isDonationOnly(order)
+      ? t('history.typeDonation')
+      : order.is_fachschaft ? t('history.fachschaftBadge') : t('history.typeSale'),
   },
 ])
 
