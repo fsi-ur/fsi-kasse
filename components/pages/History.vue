@@ -67,6 +67,23 @@
   </Page>
 
   <CommonModal v-model="showOrderModal" :title="openedOrder ? entryTitle(openedOrder) : ''">
+    <dl v-if="openedOrder" class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 pb-3 mb-2 border-b border-base-200">
+      <dt class="text-base-500">{{ t('users.id') }}</dt>
+      <dd class="text-right">{{ isDonationOnly(openedOrder) ? `#${openedOrder.donation_id}` : `#${openedOrder.id}` }}</dd>
+      <dt class="text-base-500">{{ t('history.type') }}</dt>
+      <dd class="text-right">
+        {{ isDonationOnly(openedOrder)
+          ? t('history.typeDonation')
+          : openedOrder.is_fachschaft ? t('history.fachschaftBadge') : t('history.typeSale') }}
+      </dd>
+      <dt class="text-base-500">{{ t('history.date') }}</dt>
+      <dd class="text-right">{{ formatDateTime(openedOrder.created_at) }}</dd>
+      <dt class="text-base-500">{{ t('history.cashierLabel') }}</dt>
+      <dd class="text-right">{{ openedOrder.cashier }}</dd>
+      <dt class="text-base-500">{{ t('history.stand') }}</dt>
+      <dd class="text-right">{{ openedOrder.stand || t('history.noStand') }}</dd>
+    </dl>
+
     <ul v-if="openedOrder">
       <li
         v-for="item in openedOrder.items"

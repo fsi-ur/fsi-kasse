@@ -168,6 +168,8 @@ const messages = {
       noOrders: 'Noch keine Bestellungen.',
       stand: 'Stand',
       standLabel: 'Stand: {name}',
+      date: 'Datum',
+      noStand: 'Kein Stand',
     },
     fachschaft: {
       title: 'Fachschaftszahlungen',
@@ -682,6 +684,8 @@ const messages = {
       noOrders: 'No orders yet.',
       stand: 'Stand',
       standLabel: 'Stand: {name}',
+      date: 'Date',
+      noStand: 'No stand',
     },
     fachschaft: {
       title: 'Fachschaft payments',
