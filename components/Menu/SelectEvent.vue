@@ -75,7 +75,9 @@ async function loadEvents() {
   const res = result.data
   if (res.ok) {
     const allEvents = 'events' in res ? res.events as any[] : []
-    events.value = allEvents.filter(i => i.is_active === 1 || i.is_active === true)
+    events.value = allEvents
+      .filter(i => i.is_active === 1 || i.is_active === true)
+      .sort((a, b) => String(b.starts_at).localeCompare(String(a.starts_at)) || String(a.name).localeCompare(String(b.name)))
 
     if (!result.stale && selectedEvent.value && !events.value.some(entry => entry.id === selectedEvent.value)) {
       selectedEvent.value = ''
