@@ -26,11 +26,15 @@ export default defineEventHandler(async (event) => {
       COALESCE(i.name, oi.item_name) AS item_name,
       oi.unit_price AS item_price,
       oi.unit_deposit AS item_deposit,
-      oi.quantity
+      oi.quantity,
+      oi.line_kind,
+      oi.voucher_covers_deposit,
+      v.code AS voucher_code
     FROM orders o
     JOIN cashiers c ON o.cashier_id = c.id
     JOIN order_items oi ON o.id = oi.order_id
     LEFT JOIN items i ON oi.item_id = i.id
+    LEFT JOIN vouchers v ON v.id = oi.voucher_id
     LEFT JOIN stands s ON s.id = o.stand_id
     WHERE o.event_id = ?
     ORDER BY o.created_at DESC, o.id DESC
@@ -105,7 +109,10 @@ export default defineEventHandler(async (event) => {
       name: row.item_name,
       price: Number(row.item_price),
       deposit: Number(row.item_deposit),
-      quantity: row.quantity
+      quantity: row.quantity,
+      line_kind: row.line_kind ?? 'item',
+      voucher_code: row.voucher_code ?? null,
+      voucher_covers_deposit: Boolean(Number(row.voucher_covers_deposit)),
     })
   }
 

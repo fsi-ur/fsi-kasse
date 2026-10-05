@@ -41,7 +41,7 @@
           </ul>
 
           <div class="text-right font-bold mt-3">
-            {{ t('common.total') }}: {{ formatCurrency(data.regular.totalRevenue) }}
+            {{ t('common.total') }}: {{ formatCurrency(data.regular.itemsRevenue ?? data.regular.totalRevenue) }}
           </div>
         </div>
 
@@ -98,6 +98,56 @@
             <span>{{ t('overview.donationTotal') }}</span>
             <span>{{ formatCurrency(data.donations.total) }}</span>
           </div>
+        </div>
+
+        <div v-if="showVouchers" class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
+          <h2 class="text-lg font-semibold mb-4">{{ t('overview.vouchers.title') }}</h2>
+
+          <div class="flex justify-between">
+            <span>{{ t('overview.vouchers.sold', { count: vouchers.sold.count }) }}</span>
+            <span class="font-semibold">{{ formatCurrency(vouchers.sold.revenue) }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span>{{ t('overview.vouchers.redeemed', { count: vouchers.redeemed.totalQuantity }) }}</span>
+            <span>{{ formatCurrency(vouchers.redeemed.totalWorth) }}</span>
+          </div>
+          <div v-if="vouchers.redeemed.totalWorth > 0" class="flex justify-between text-sm text-base-500">
+            <span>{{ t('overview.vouchers.redeemedSplit') }}</span>
+            <span>{{ formatCurrency(vouchers.redeemed.paidWorth) }} / {{ formatCurrency(vouchers.redeemed.freeWorth) }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span>{{ t('overview.vouchers.deposits') }}</span>
+            <span>{{ formatCurrency(vouchers.redeemed.depositsCollected) }}</span>
+          </div>
+          <p class="mt-1 text-xs text-base-500">{{ t('overview.vouchers.worthHint') }}</p>
+
+          <ul v-if="vouchers.redeemed.items.length" class="mt-3">
+            <li
+              v-for="i in vouchers.redeemed.items"
+              :key="i.id ?? i.name"
+              class="grid grid-cols-[minmax(0,1fr)_auto_5rem] gap-4 border-b border-base-200 py-1 text-sm"
+            >
+              <span class="truncate">{{ i.name }}</span>
+              <span class="text-right">{{ i.quantity }} {{ t('overview.pcs') }}</span>
+              <span class="text-right">{{ formatCurrency(i.worth) }}</span>
+            </li>
+          </ul>
+
+          <template v-if="!standFilterActive && vouchers.outstanding.length">
+            <h3 class="section-title mt-4">{{ t('overview.vouchers.outstanding') }}</h3>
+            <ul>
+              <li
+                v-for="batch in vouchers.outstanding"
+                :key="batch.batch_id"
+                class="grid grid-cols-[minmax(0,1fr)_auto_5rem] gap-4 border-b border-base-200 py-1 text-sm"
+              >
+                <span class="truncate">{{ batch.name }}</span>
+                <span class="text-right">{{ t('overview.vouchers.units', { count: batch.units }) }}</span>
+                <span class="text-right">~{{ formatCurrency(batch.estimated_worth) }}</span>
+              </li>
+            </ul>
+            <p class="mt-1 text-xs text-base-500">{{ t('overview.vouchers.estimateHint') }}</p>
+          </template>
         </div>
 
         <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
@@ -339,6 +389,13 @@ const showFachschaft = computed(() =>
   fachschaftEnabled.value
   || Number(data.value?.payments?.count ?? 0) > 0
   || (data.value?.fachschaft?.items?.length ?? 0) > 0)
+
+const vouchers = computed(() => data.value?.vouchers ?? null)
+// Only events that used vouchers (or have open ones for this event) get the card.
+const showVouchers = computed(() => Boolean(vouchers.value && (
+  vouchers.value.sold.count > 0
+  || vouchers.value.redeemed.totalQuantity > 0
+  || vouchers.value.outstanding.length > 0)))
 
 const hourly = computed<any[]>(() => data.value?.hourly ?? [])
 const paymentAmounts = computed<Array<{ amount: number, count: number }>>(() => data.value?.payments?.amounts ?? [])

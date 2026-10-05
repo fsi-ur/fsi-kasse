@@ -14,7 +14,7 @@
         <div
           v-if="open"
           ref="menuRef"
-          class="absolute z-100 rounded-lg border border-base-200 bg-white p-1 shadow-xl ring-1 ring-base-900/5 max-h-50 overflow-y-auto"
+          class="fixed z-100 rounded-lg border border-base-200 bg-white p-1 shadow-xl ring-1 ring-base-900/5 max-h-50 overflow-y-auto"
           :style="dropdownStyle"
           @mousedown.stop
           @click.stop
@@ -74,7 +74,6 @@ function updateDropdownPosition() {
   const preferredMaxHeight = 200
   const wrapperRect = wrapper.value.getBoundingClientRect()
   const menuElement = menuRef.value
-  const menuRect = menuElement?.getBoundingClientRect()
   const topBoundary = viewportPadding
   const bottomBoundary = window.innerHeight - viewportPadding
   const spaceBelow = bottomBoundary - wrapperRect.bottom
@@ -84,15 +83,19 @@ function updateDropdownPosition() {
   const availableSpace = Math.max((shouldOpenUp ? spaceAbove : spaceBelow) - menuGap, 0)
   const menuMaxHeight = Math.max(Math.min(preferredMaxHeight, availableSpace), 0)
   const actualMenuHeight = Math.min(menuElement?.scrollHeight ?? desiredMenuHeight, menuMaxHeight || desiredMenuHeight)
-  const measuredWidth = menuRect?.width ?? Math.max(wrapperRect.width, menuElement?.scrollWidth ?? 0)
+  // offsetWidth, not getBoundingClientRect: the enter transition scales the menu, which would
+  // under-measure it on the first frame and shift it once the next scroll re-measures.
+  const measuredWidth = Math.max(wrapperRect.width, menuElement?.offsetWidth ?? 0)
   const maxLeft = window.innerWidth - viewportPadding - measuredWidth
-  const left = window.scrollX + Math.min(
+  // Viewport coordinates with position: fixed — a modal's scroll lock sets
+  // `body { position: fixed; top: -scrollY }`, which would offset an absolutely positioned menu.
+  const left = Math.min(
     Math.max(wrapperRect.left, viewportPadding),
     Math.max(viewportPadding, maxLeft),
   )
   const top = shouldOpenUp
-    ? window.scrollY + Math.max(topBoundary, wrapperRect.top - actualMenuHeight - menuGap)
-    : window.scrollY + Math.min(bottomBoundary, wrapperRect.bottom + menuGap)
+    ? Math.max(topBoundary, wrapperRect.top - actualMenuHeight - menuGap)
+    : Math.min(bottomBoundary, wrapperRect.bottom + menuGap)
 
   dropdownStyle.value = {
     top: `${top}px`,
@@ -126,8 +129,12 @@ function handleClickOutside(e: MouseEvent) {
   }
 }
 
+// Captured on document so it runs before a surrounding modal's window listener:
+// Escape closes only the open menu, not the modal around it.
 function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') closeDropdown()
+  if (e.key !== 'Escape' || !open.value) return
+  e.stopPropagation()
+  closeDropdown()
 }
 
 function handleViewportChange() {
@@ -142,7 +149,7 @@ watch(open, async (isOpen) => {
 
 onMounted(() => {
   document.addEventListener('mousedown', handleClickOutside)
-  window.addEventListener('keydown', handleKeydown)
+  document.addEventListener('keydown', handleKeydown, true)
   window.addEventListener('resize', handleViewportChange)
   window.addEventListener('scroll', handleViewportChange, true)
   window.visualViewport?.addEventListener('resize', handleViewportChange)
@@ -151,7 +158,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleClickOutside)
-  window.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('keydown', handleKeydown, true)
   window.removeEventListener('resize', handleViewportChange)
   window.removeEventListener('scroll', handleViewportChange, true)
   window.visualViewport?.removeEventListener('resize', handleViewportChange)

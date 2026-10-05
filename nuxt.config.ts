@@ -35,7 +35,7 @@ export default defineNuxtConfig({
   pwa: {
     registerType: 'prompt',
     workbox: {
-      globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2,webmanifest}'],
+      globPatterns: ['**/*.{js,mjs,css,html,png,svg,ico,woff2,webmanifest}'],
       maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       additionalManifestEntries: [{ url: baseURL, revision: buildRevision }],
       navigateFallback: baseURL,

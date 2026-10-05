@@ -12,8 +12,13 @@ export interface CheckoutPayload {
   event_id: number
   is_fachschaft: boolean
   stand_id?: number | null
-  /** unit_price/unit_deposit are what the cashier charged; the server books them. */
-  items: Array<{ id: number, quantity: number, unit_price: number, unit_deposit: number }>
+  /**
+   * unit_price/unit_deposit are what the cashier charged; the server books them.
+   * With voucher_code the line is redeemed with that voucher (the price is then the item's worth).
+   */
+  items: Array<{ id: number, quantity: number, unit_price: number, unit_deposit: number, voucher_code?: string }>
+  /** Vouchers sold with this order, at the batch price the cashier charged. */
+  voucher_sales?: Array<{ code: string, unit_price: number }>
   donation:
     | null
     | { mode: 'direct', amount: number }
@@ -53,6 +58,17 @@ export type SubmitResult =
   | { status: 'synced', result: any }
   | { status: 'rejected', error: string | null }
   | { status: 'queued' }
+  /** requireOnline and the server is unreachable: nothing was stored. */
+  | { status: 'offline_blocked' }
+
+export interface SubmitOptions {
+  /**
+   * The booking needs a live server check (voucher sales/redemptions): when
+   * offline at submit time it is refused instead of queued. Once sent, a lost
+   * response is still replayed from the outbox like any other sale.
+   */
+  requireOnline?: boolean
+}
 
 export interface FlushSummary {
   synced: Array<{ entry: OutboxEntry, result: any }>
@@ -147,10 +163,15 @@ async function submit(
   kind: OutboxKind,
   payload: CheckoutPayload | FachschaftPayPayload,
   display: OutboxDisplay,
+  options: SubmitOptions = {},
 ): Promise<SubmitResult> {
   await ready()
 
   const { isOnline, markOffline, markOnline, probe } = useConnectivity()
+
+  if (options.requireOnline && !isOnline.value && !(await probe())) {
+    return { status: 'offline_blocked' }
+  }
 
   const entry: OutboxEntry = {
     client_uuid: payload.client_uuid,

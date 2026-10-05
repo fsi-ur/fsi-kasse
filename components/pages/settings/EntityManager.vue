@@ -146,6 +146,7 @@ export interface EntityManagerColumn {
   filterable?: boolean
   globalSearchable?: boolean
   mobile?: 'title' | 'meta' | 'hidden'
+  mobileLabel?: boolean
   format?: (item: SettingsEntityRow) => string
   getValue?: (item: SettingsEntityRow, items: SettingsEntityRow[]) => unknown
 }
@@ -261,6 +262,7 @@ const columns = computed<AdvancedTableColumn<SettingsEntityRow>[]>(() => [
     filterable: column.filterable,
     globalSearchable: column.globalSearchable ?? false,
     mobile: column.mobile,
+    mobileLabel: column.mobileLabel,
     format: column.format,
     getValue: (item: SettingsEntityRow) => column.getValue?.(item, items.value) ?? getFallbackColumnValue(item, column.key),
   })),

@@ -104,14 +104,23 @@
         <span class="col-span-1">{{ item.quantity }}</span>
         <span class="col-span-3">{{ item.name }}
           <span
-            v-if="item.deposit > 0"
+            v-if="item.deposit > 0 && item.line_kind === 'item'"
             class="text-xs text-base-500"
           >
             {{ t('checkout.depositSuffix', { amount: formatCurrency(item.deposit) }) }}
           </span>
+          <span v-if="item.voucher_code" class="mt-0.5 flex items-center gap-1">
+            <span class="rounded-full bg-success-300 px-2 py-0.5 text-[10px] font-medium text-success-900">
+              {{ item.line_kind === 'voucher_sale' ? t('vouchers.cart.sold') : t('vouchers.cart.badge') }}
+            </span>
+            <span class="font-mono text-xs text-base-500">{{ formatVoucherCode(item.voucher_code) }}</span>
+          </span>
         </span>
         <span class="col-span-2 text-right">
-          {{ formatCurrency((Number(item.price) + Number(item.deposit)) * item.quantity) }}
+          <span v-if="item.line_kind === 'voucher_redemption'" class="block text-xs text-base-400 line-through">
+            {{ formatCurrency(lineWorth(item)) }}
+          </span>
+          {{ formatCurrency(itemCashTotal(item)) }}
         </span>
       </li>
     </ul>
@@ -177,6 +186,8 @@ import type { AdvancedTableColumn } from '~/composables/useAdvancedTable'
 import { cachedFetch } from '~/composables/useCachedFetch'
 import { onOfflineDataChanged } from '~/composables/useOfflineQueue'
 import { useConnectivity } from '~/composables/useConnectivity'
+import { lineCashTotal, lineWorth } from '~/utils/lineTotal'
+import { formatVoucherCode } from '~/utils/voucherCode'
 
 const { selectedEvent } = useCheckout()
 const { t } = useI18n()
@@ -198,9 +209,19 @@ const cachedAt = ref<number | null>(null)
 const showEditor = ref(false)
 const editedOrder = ref<any | null>(null)
 
+function itemCashTotal(item: any) {
+  return lineCashTotal({
+    kind: item.line_kind,
+    quantity: item.quantity,
+    price: item.price,
+    deposit: item.deposit,
+    coversDeposit: item.voucher_covers_deposit,
+  })
+}
+
+// What the customer paid: redeemed lines only count with their deposit (if not covered).
 function orderTotal(order: any) {
-  return order.items
-    .reduce((s: number, i: any) => s + (Number(i.price) + Number(i.deposit)) * Number(i.quantity), 0)
+  return order.items.reduce((s: number, i: any) => s + itemCashTotal(i), 0)
 }
 
 // Direct donations have no order and show up as their own history entry

@@ -17,6 +17,7 @@ npm run setup:migrate:add-donations  # donations table
 npm run setup:migrate:price-snapshots # price/amount snapshots + item_price_history + app_settings_history
 npm run setup:migrate:client-uuid    # client_uuid on orders/donations/fachschaft_payments (offline idempotency)
 npm run setup:migrate:guests         # affiliations, guest_users, guest_sessions + cashiers.is_guest/affiliation_id
+npm run setup:migrate:vouchers       # item_groups, voucher_batches, vouchers + order line kinds (line_kind/voucher_id)
 npm run setup:seed-admin             # admin bootstrap + auth role migration
 ```
 
@@ -74,7 +75,9 @@ npm run setup:connection-db-user
 
 reads `CONNECTION_DB_USER` / `CONNECTION_DB_PASSWORD` from `.env` and creates a
 read-only user in this cash register database (`SELECT` on `events`, `items`,
-`orders`, `order_items`, `fachschaft_payments`, `app_settings`). The
+`orders`, `order_items`, `fachschaft_payments`, `app_settings`, `donations`,
+the price/setting history tables, `stands`, `item_groups`, `voucher_batches` and
+`vouchers`). Re-run it after updating the till so new tables get granted. The
 buchhaltung uses these credentials as `CASH_REGISTER_DB_USER` /
 `CASH_REGISTER_DB_PASSWORD` for its per-event cash register tab.
 

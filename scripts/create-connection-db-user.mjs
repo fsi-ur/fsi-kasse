@@ -27,6 +27,9 @@ const SELECT_TABLES = [
   'item_price_history',
   'app_settings_history',
   'stands',
+  'item_groups',
+  'voucher_batches',
+  'vouchers',
 ]
 
 if (!CONNECTION_DB_USER || !CONNECTION_DB_PASSWORD) {

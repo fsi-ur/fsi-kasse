@@ -1,6 +1,7 @@
 import { defineEventHandler, setHeader } from 'h3'
 import { query } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
+import { lineCashTotal } from '~/server/utils/checkout'
 
 export default defineEventHandler(async (event) => {
   const current = await requirePermission(event, 'cash_register.manage')
@@ -17,11 +18,15 @@ export default defineEventHandler(async (event) => {
       COALESCE(i.name, oi.item_name) AS item,
       oi.quantity,
       oi.unit_price AS price,
-      oi.unit_deposit AS deposit
+      oi.unit_deposit AS deposit,
+      oi.line_kind,
+      oi.voucher_covers_deposit,
+      v.code AS voucher_code
     FROM orders o
     JOIN cashiers c ON o.cashier_id = c.id
     JOIN order_items oi ON oi.order_id = o.id
     LEFT JOIN items i ON oi.item_id = i.id
+    LEFT JOIN vouchers v ON v.id = oi.voucher_id
     JOIN events e ON e.id = o.event_id
     LEFT JOIN stands s ON s.id = o.stand_id
     ORDER BY o.created_at DESC
@@ -58,13 +63,18 @@ export default defineEventHandler(async (event) => {
     ORDER BY d.created_at DESC
   `)
 
-  let csv = 'Order ID,Event,Date,Cashier,Stand,Fachschaft,Item,Quantity,Price,Deposit,Total'
+  // Total is the line's worth at the charged prices; Cash Amount is what the
+  // customer actually paid (a voucher redemption only its uncovered deposit).
+  let csv = 'Order ID,Event,Date,Cashier,Stand,Fachschaft,Item,Quantity,Price,Deposit,Total,Line Kind,Voucher Code,Cash Amount'
 
   for (const row of orderRows as any[]) {
     const total =
       row.fachschaft === 1
         ? 0
         : (Number(row.price) + Number(row.deposit)) * Number(row.quantity)
+    const cashAmount = row.fachschaft === 1
+      ? 0
+      : lineCashTotal({ ...row, unit_price: row.price, unit_deposit: row.deposit })
 
     csv += `\n${[
       row.order_id,
@@ -77,7 +87,10 @@ export default defineEventHandler(async (event) => {
       row.quantity,
       Number(row.price).toFixed(2),
       Number(row.deposit).toFixed(2),
-      total.toFixed(2)
+      total.toFixed(2),
+      row.line_kind,
+      row.voucher_code ?? '',
+      cashAmount.toFixed(2),
     ].join(',')}`
   }
 

@@ -2,6 +2,8 @@ import { defineEventHandler, getQuery } from 'h3'
 import { query } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
+import { cashAmountSql } from '~/server/utils/checkout'
+import { loadVoucherOverview } from '~/server/utils/voucherOverview'
 
 interface HourlyEntry {
   hour: string
@@ -35,7 +37,7 @@ function fillHourlyGaps(rows: Array<{ hour_start: string, revenue: unknown, quan
   return result
 }
 
-interface StandFilter {
+export interface StandFilter {
   orders: string
   donations: string
   params: unknown[]
@@ -77,13 +79,23 @@ export default defineEventHandler(async (event) => {
     JOIN order_items oi ON o.id = oi.order_id
     LEFT JOIN items i ON oi.item_id = i.id
     WHERE o.fachschaft = 0
+      AND oi.line_kind = 'item'
       AND o.event_id = ?${stand.orders}
     GROUP BY oi.item_id
     ORDER BY name ASC
   `, [eventId, ...stand.params]))
 
   const regularItems = normalizeBigInt(regularRows)
-  const totalRevenue = regularItems.reduce((sum: number, item: any) => sum + Number(item.revenue), 0)
+  const itemsRevenue = regularItems.reduce((sum: number, item: any) => sum + Number(item.revenue), 0)
+
+  const revenueRows = normalizeBigInt(await query(`
+    SELECT IFNULL(SUM(${cashAmountSql()}), 0) AS revenue
+    FROM orders o
+    JOIN order_items oi ON o.id = oi.order_id
+    WHERE o.fachschaft = 0
+      AND o.event_id = ?${stand.orders}
+  `, [eventId, ...stand.params]))
+  const totalRevenue = Number(revenueRows[0]?.revenue ?? 0)
 
   // Items given out to the Fachschaft are never paid for — no deposit changes
   // hands either, so the worth is the price only, unlike regular sales.
@@ -97,6 +109,7 @@ export default defineEventHandler(async (event) => {
     JOIN order_items oi ON o.id = oi.order_id
     LEFT JOIN items i ON oi.item_id = i.id
     WHERE o.fachschaft = 1
+      AND oi.line_kind = 'item'
       AND o.event_id = ?${stand.orders}
     GROUP BY oi.item_id
     ORDER BY name ASC
@@ -108,8 +121,8 @@ export default defineEventHandler(async (event) => {
   const hourlyRows = normalizeBigInt(await query(`
     SELECT
       DATE_FORMAT(o.created_at, '%Y-%m-%d %H:00:00') AS hour_start,
-      SUM(oi.quantity * (oi.unit_price + oi.unit_deposit)) AS revenue,
-      SUM(oi.quantity) AS quantity
+      SUM(${cashAmountSql()}) AS revenue,
+      SUM(IF(oi.line_kind = 'voucher_sale', 0, oi.quantity)) AS quantity
     FROM orders o
     JOIN order_items oi ON o.id = oi.order_id
     WHERE o.fachschaft = 0
@@ -143,8 +156,8 @@ export default defineEventHandler(async (event) => {
 
   const lastHourRows = normalizeBigInt(await query(`
     SELECT
-      SUM(oi.quantity * (oi.unit_price + oi.unit_deposit)) AS revenue,
-      SUM(oi.quantity) AS quantity
+      SUM(${cashAmountSql()}) AS revenue,
+      SUM(IF(oi.line_kind = 'voucher_sale', 0, oi.quantity)) AS quantity
     FROM orders o
     JOIN order_items oi ON o.id = oi.order_id
     WHERE o.fachschaft = 0
@@ -154,8 +167,8 @@ export default defineEventHandler(async (event) => {
 
   const prevHourRows = normalizeBigInt(await query(`
     SELECT
-      SUM(oi.quantity * (oi.unit_price + oi.unit_deposit)) AS revenue,
-      SUM(oi.quantity) AS quantity
+      SUM(${cashAmountSql()}) AS revenue,
+      SUM(IF(oi.line_kind = 'voucher_sale', 0, oi.quantity)) AS quantity
     FROM orders o
     JOIN order_items oi ON o.id = oi.order_id
     WHERE o.fachschaft = 0
@@ -181,8 +194,8 @@ export default defineEventHandler(async (event) => {
     SELECT
       o.stand_id AS id,
       COUNT(DISTINCT o.id) AS orders,
-      SUM(oi.quantity) AS quantity,
-      SUM(oi.quantity * (oi.unit_price + oi.unit_deposit)) AS revenue
+      SUM(IF(oi.line_kind = 'voucher_sale', 0, oi.quantity)) AS quantity,
+      SUM(${cashAmountSql()}) AS revenue
     FROM orders o
     JOIN order_items oi ON oi.order_id = o.id
     WHERE o.fachschaft = 0
@@ -230,12 +243,16 @@ export default defineEventHandler(async (event) => {
 
   const stands = [...standsById.values()].sort((a, b) => b.revenue - a.revenue)
 
+  const vouchers = await loadVoucherOverview(eventId, stand)
+
   return {
     ok: true,
     regular: {
       items: regularItems,
+      itemsRevenue,
       totalRevenue,
     },
+    vouchers,
     fachschaft: {
       items: fachschaftItems,
       totalWorth: fachschaftTotalWorth,

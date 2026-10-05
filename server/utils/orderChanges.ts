@@ -2,7 +2,7 @@ import type * as mariadb from 'mariadb'
 import { query } from '~/server/utils/db'
 import { normalizeBigInt } from '~/server/utils/normalize'
 import { getCashRegisterEvents } from '~/server/utils/events'
-import { round2 } from '~/server/utils/checkout'
+import { lineCashTotal, round2, type LineKind } from '~/server/utils/checkout'
 
 export type OrderChangeStatus = 'pending' | 'approved' | 'rejected'
 
@@ -15,6 +15,9 @@ export interface OrderLineRow {
   quantity: number
   unit_price: string | number
   unit_deposit: string | number
+  line_kind: LineKind
+  voucher_id: number | null
+  voucher_covers_deposit: number
 }
 
 export interface OrderChangeLine {
@@ -25,6 +28,10 @@ export interface OrderChangeLine {
   quantity: number
   price: number
   deposit: number
+  line_kind: LineKind
+  voucher_id: number | null
+  voucher_code: string | null
+  voucher_covers_deposit: boolean
 }
 
 export interface OrderChangeSide {
@@ -60,7 +67,7 @@ export function parseChangeText(value: unknown): string | null | undefined {
 
 export async function loadOrderLines(orderId: number, conn?: mariadb.PoolConnection): Promise<OrderLineRow[]> {
   return normalizeBigInt(await query<OrderLineRow[]>(
-    `SELECT id, item_id, item_name, quantity, unit_price, unit_deposit
+    `SELECT id, item_id, item_name, quantity, unit_price, unit_deposit, line_kind, voucher_id, voucher_covers_deposit
      FROM order_items
      WHERE order_id = ?
      ORDER BY id`,
@@ -75,21 +82,30 @@ function cents(amount: unknown) {
 
 export function orderMatchesSnapshot(
   current: { fachschaft: boolean, lines: OrderLineRow[] },
-  snapshot: { fachschaft: boolean, lines: Array<{ order_item_id: number | null, quantity: number, unit_price: unknown, unit_deposit: unknown }> },
+  snapshot: {
+    fachschaft: boolean
+    lines: Array<{ order_item_id: number | null, quantity: number, unit_price: unknown, unit_deposit: unknown, line_kind: unknown, voucher_id: unknown }>
+  },
 ) {
   if (current.fachschaft !== snapshot.fachschaft) return false
   if (current.lines.length !== snapshot.lines.length) return false
 
-  const key = (id: unknown, quantity: unknown, price: unknown, deposit: unknown) =>
-    `${Number(id)}|${Number(quantity)}|${cents(price)}|${cents(deposit)}`
+  const key = (id: unknown, quantity: unknown, price: unknown, deposit: unknown, kind: unknown, voucherId: unknown) =>
+    `${Number(id)}|${Number(quantity)}|${cents(price)}|${cents(deposit)}|${kind ?? 'item'}|${voucherId == null ? '' : Number(voucherId)}`
 
-  const currentKeys = new Set(current.lines.map(line => key(line.id, line.quantity, line.unit_price, line.unit_deposit)))
-  return snapshot.lines.every(line => currentKeys.has(key(line.order_item_id, line.quantity, line.unit_price, line.unit_deposit)))
+  const currentKeys = new Set(current.lines.map(line => key(line.id, line.quantity, line.unit_price, line.unit_deposit, line.line_kind, line.voucher_id)))
+  return snapshot.lines.every(line => currentKeys.has(key(line.order_item_id, line.quantity, line.unit_price, line.unit_deposit, line.line_kind, line.voucher_id)))
 }
 
 function sideTotal(fachschaft: boolean, lines: OrderChangeLine[]) {
   if (fachschaft) return 0
-  return round2(lines.reduce((sum, line) => sum + line.quantity * (line.price + line.deposit), 0))
+  return round2(lines.reduce((sum, line) => sum + lineCashTotal({
+    line_kind: line.line_kind,
+    quantity: line.quantity,
+    unit_price: line.price,
+    unit_deposit: line.deposit,
+    voucher_covers_deposit: line.voucher_covers_deposit,
+  }), 0))
 }
 
 interface RequestRow {
@@ -118,6 +134,10 @@ interface RequestLineRow {
   quantity: number
   unit_price: string | number
   unit_deposit: string | number
+  line_kind: LineKind
+  voucher_id: number | null
+  voucher_code: string | null
+  voucher_covers_deposit: number
 }
 
 export async function loadChangeRequests(
@@ -149,10 +169,12 @@ export async function loadChangeRequests(
 
   const ids = rows.map(row => Number(row.id))
   const lineRows: RequestLineRow[] = normalizeBigInt(await query<RequestLineRow[]>(
-    `SELECT id, request_id, version, order_item_id, item_id, item_name, quantity, unit_price, unit_deposit
-     FROM order_change_request_lines
-     WHERE request_id IN (${ids.map(() => '?').join(', ')})
-     ORDER BY id`,
+    `SELECT l.id, l.request_id, l.version, l.order_item_id, l.item_id, l.item_name, l.quantity, l.unit_price, l.unit_deposit,
+       l.line_kind, l.voucher_id, v.code AS voucher_code, l.voucher_covers_deposit
+     FROM order_change_request_lines l
+     LEFT JOIN vouchers v ON v.id = l.voucher_id
+     WHERE l.request_id IN (${ids.map(() => '?').join(', ')})
+     ORDER BY l.id`,
     ids,
   ))
 
@@ -171,6 +193,10 @@ export async function loadChangeRequests(
       quantity: Number(row.quantity),
       price: Number(row.unit_price),
       deposit: Number(row.unit_deposit),
+      line_kind: row.line_kind ?? 'item',
+      voucher_id: row.voucher_id == null ? null : Number(row.voucher_id),
+      voucher_code: row.voucher_code ?? null,
+      voucher_covers_deposit: Boolean(Number(row.voucher_covers_deposit)),
     })
   }
 

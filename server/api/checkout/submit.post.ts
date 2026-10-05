@@ -15,6 +15,13 @@ import {
 import { resolveStandId } from '~/server/utils/stands'
 import { getCashRegisterEventById } from '~/server/utils/events'
 import { getCashRegisterSettings } from '~/server/utils/appSettings'
+import {
+  applyVoucherDeltas,
+  berlinLocalNow,
+  normalizeVoucherSales,
+  resolveVoucherLines,
+  VoucherBookingError,
+} from '~/server/utils/vouchers'
 
 type DonationInput =
   | null
@@ -68,12 +75,17 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'Missing or invalid order items' }
   }
 
+  const voucherSales = normalizeVoucherSales(body?.voucher_sales)
+  if (!voucherSales) {
+    return { ok: false, error: 'Missing or invalid voucher sales' }
+  }
+
   const donation = parseDonation(body?.donation)
   if (donation === undefined) {
     return { ok: false, error: 'Missing or invalid donation details' }
   }
 
-  if (lines.size === 0 && !donation) {
+  if (lines.length === 0 && voucherSales.length === 0 && !donation) {
     return { ok: false, error: 'Missing or invalid order items' }
   }
 
@@ -84,9 +96,14 @@ export default defineEventHandler(async (event) => {
 
   const resolved = await resolveBookedLines(lines)
   if (!resolved.ok) return resolved
-  const booked = resolved.booked
 
-  const isFachschaft = Boolean(body?.is_fachschaft) && booked.length > 0
+  const hasLines = resolved.booked.length > 0 || voucherSales.length > 0
+  const isFachschaft = Boolean(body?.is_fachschaft) && hasLines
+
+  const vouchers = await resolveVoucherLines({ lines: resolved.booked, sales: voucherSales, isFachschaft })
+  if (!vouchers.ok) return vouchers
+  const booked = [...resolved.booked, ...vouchers.sales]
+
   if (isFachschaft) {
     const fachschaftEvent = await getCashRegisterEventById(eventId)
     if (!fachschaftEvent?.fachschaft_enabled || !(await getCashRegisterSettings()).fachschaft_enabled) {
@@ -118,11 +135,16 @@ export default defineEventHandler(async (event) => {
 
         orderId = Number(normalizeBigInt((result as any).insertId))
 
+        // Validity is judged by the server's clock and the order's event.
+        await applyVoucherDeltas(vouchers.deltas, { eventId, at: berlinLocalNow() }, conn, orderId)
+
         for (const line of booked) {
           await query(
-            `INSERT INTO order_items (order_id, item_id, item_name, quantity, unit_price, unit_deposit)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [orderId, line.item_id, line.name, line.quantity, line.unit_price, line.unit_deposit],
+            `INSERT INTO order_items
+               (order_id, item_id, item_name, quantity, unit_price, unit_deposit, line_kind, voucher_id, voucher_covers_deposit)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [orderId, line.item_id, line.name, line.quantity, line.unit_price, line.unit_deposit,
+              line.line_kind, line.voucher_id, line.voucher_covers_deposit ? 1 : 0],
             conn,
           )
         }
@@ -141,6 +163,7 @@ export default defineEventHandler(async (event) => {
 
     return { ok: true, order_id, total, lines: booked, donation_amount: donationAmount }
   } catch (error) {
+    if (error instanceof VoucherBookingError) return { ok: false, error: error.message }
     if (!isDuplicateEntryError(error)) throw error
 
     const replayed = await findCommittedCheckout(clientUuid)

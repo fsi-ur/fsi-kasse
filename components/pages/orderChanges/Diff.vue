@@ -25,6 +25,12 @@
           <span class="text-xs text-base-500">
             {{ formatCurrency(row.price) }}<template v-if="row.deposit > 0"> {{ t('checkout.depositSuffix', { amount: formatCurrency(row.deposit) }) }}</template>
           </span>
+          <span v-if="row.voucherCode" class="mt-0.5 flex items-center gap-1">
+            <span class="rounded-full bg-success-300 px-2 py-0.5 text-[10px] font-medium text-success-900">
+              {{ row.lineKind === 'voucher_sale' ? t('vouchers.cart.sold') : t('vouchers.cart.badge') }}
+            </span>
+            <span class="font-mono text-xs text-base-500">{{ formatVoucherCode(row.voucherCode) }}</span>
+          </span>
         </span>
         <span class="col-span-1 flex justify-end">
           <CommonStatusBadge v-if="row.kind === 'added'" :label="t('orderChanges.added')" tone="success" />
@@ -58,6 +64,7 @@
 import { useI18n } from '~/composables/useI18n'
 import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
 import type { OrderChangeRequest } from '~/server/utils/orderChanges'
+import { formatVoucherCode } from '~/utils/voucherCode'
 
 const props = defineProps<{
   request: Pick<OrderChangeRequest, 'original' | 'proposed'>
@@ -74,6 +81,8 @@ interface DiffRow {
   deposit: number
   before: number
   after: number
+  lineKind: string
+  voucherCode: string | null
 }
 
 const rows = computed<DiffRow[]>(() => {
@@ -92,6 +101,8 @@ const rows = computed<DiffRow[]>(() => {
       deposit: line.deposit,
       before: line.quantity,
       after,
+      lineKind: line.line_kind,
+      voucherCode: line.voucher_code,
     }
   })
 
@@ -105,6 +116,8 @@ const rows = computed<DiffRow[]>(() => {
       deposit: line.deposit,
       before: 0,
       after: line.quantity,
+      lineKind: line.line_kind,
+      voucherCode: line.voucher_code,
     })
   }
 

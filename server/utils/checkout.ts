@@ -2,6 +2,7 @@ import { query } from '~/server/utils/db'
 import { normalizeBigInt } from '~/server/utils/normalize'
 import { getCashRegisterCashierById } from '~/server/utils/cashiers'
 import { getCashRegisterEventById } from '~/server/utils/events'
+import { normalizeVoucherCode } from '~/utils/voucherCode'
 
 interface ItemRow {
   id: number
@@ -11,12 +12,21 @@ interface ItemRow {
   is_active: number
 }
 
+export type LineKind = 'item' | 'voucher_redemption' | 'voucher_sale'
+
 export interface BookedLine {
-  item_id: number
+  /** null for voucher sales (and for lines of deleted items). */
+  item_id: number | null
   name: string
   quantity: number
+  /** For redemptions the item's real price — its worth, not what the customer paid. */
   unit_price: number
   unit_deposit: number
+  line_kind: LineKind
+  voucher_id: number | null
+  voucher_code: string | null
+  voucher_covers_deposit: boolean
+  /** The cash the customer pays for the line (see lineCashTotal). */
   line_total: number
 }
 
@@ -24,6 +34,33 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 export function round2(value: number) {
   return Math.round(value * 100) / 100
+}
+
+/**
+ * The cash a customer pays for an order line. A redeemed line is covered by
+ * the voucher — only its deposit is paid, unless the voucher covers that too.
+ * Every total (checkout, history, change requests, overview) goes through this,
+ * its SQL twin cashAmountSql, or the client twin in utils/lineTotal.ts.
+ */
+export function lineCashTotal(line: {
+  line_kind?: string | null
+  quantity: unknown
+  unit_price: unknown
+  unit_deposit: unknown
+  voucher_covers_deposit?: unknown
+}) {
+  const quantity = Number(line.quantity)
+  if (line.line_kind === 'voucher_redemption') {
+    return Number(line.voucher_covers_deposit) ? 0 : round2(quantity * Number(line.unit_deposit))
+  }
+  return round2(quantity * (Number(line.unit_price) + Number(line.unit_deposit)))
+}
+
+/** SQL twin of lineCashTotal for an order_items row aliased `alias`. */
+export function cashAmountSql(alias = 'oi') {
+  return `(${alias}.quantity * CASE ${alias}.line_kind
+    WHEN 'voucher_redemption' THEN IF(${alias}.voucher_covers_deposit = 1, 0, ${alias}.unit_deposit)
+    ELSE ${alias}.unit_price + ${alias}.unit_deposit END)`
 }
 
 /** Returns the lower-cased UUID, or null when the value is not a UUID. */
@@ -40,6 +77,9 @@ export function isDuplicateEntryError(error: unknown) {
 }
 
 export interface RequestedLine {
+  item_id: number
+  /** Set for a voucher redemption: the item is paid with this voucher. */
+  voucher_code: string | null
   quantity: number
   unit_price: number | null
   unit_deposit: number | null
@@ -53,12 +93,14 @@ function parseAmount(value: unknown): number | null | undefined {
 }
 
 // Normalises the request lines: positive integer id/quantity, duplicates merged.
-// An empty (or missing) list comes back as an empty map
-export function normalizeLines(items: unknown): Map<number, RequestedLine> | null {
-  if (items == null) return new Map()
+// Lines are keyed by item and voucher — the same item can be a paid line and
+// be redeemed with several vouchers in one order. An empty (or missing) list
+// comes back empty
+export function normalizeLines(items: unknown): RequestedLine[] | null {
+  if (items == null) return []
   if (!Array.isArray(items)) return null
 
-  const merged = new Map<number, RequestedLine>()
+  const merged = new Map<string, RequestedLine>()
 
   for (const entry of items) {
     const id = Number((entry as any)?.id)
@@ -72,16 +114,25 @@ export function normalizeLines(items: unknown): Map<number, RequestedLine> | nul
     // Price and deposit are one charged state of the item: both or neither.
     if ((unitPrice === null) !== (unitDeposit === null)) return null
 
-    const existing = merged.get(id)
+    let voucherCode: string | null = null
+    const rawCode = (entry as any)?.voucher_code
+    if (rawCode != null && rawCode !== '') {
+      const normalized = normalizeVoucherCode(rawCode)
+      if (!normalized.ok) return null
+      voucherCode = normalized.code
+    }
+
+    const key = `${id}|${voucherCode ?? ''}`
+    const existing = merged.get(key)
     if (existing) {
       if (existing.unit_price !== unitPrice || existing.unit_deposit !== unitDeposit) return null
       existing.quantity += quantity
     } else {
-      merged.set(id, { quantity, unit_price: unitPrice, unit_deposit: unitDeposit })
+      merged.set(key, { item_id: id, voucher_code: voucherCode, quantity, unit_price: unitPrice, unit_deposit: unitDeposit })
     }
   }
 
-  return merged
+  return [...merged.values()]
 }
 
 function toCents(amount: unknown) {
@@ -112,8 +163,14 @@ export async function validateCashierAndEvent(cashierId: number, eventId: number
   return null
 }
 
-export async function resolveBookedLines(lines: Map<number, RequestedLine>) {
-  const ids = [...lines.keys()]
+/**
+ * Books the item and redemption lines at the price the cashier charged, if
+ * the item ever had that price. Redemption lines come back with
+ * `voucher_code` set but without voucher_id / deposit coverage — those are
+ * filled in by resolveVoucherLines.
+ */
+export async function resolveBookedLines(lines: RequestedLine[]) {
+  const ids = [...new Set(lines.map(line => line.item_id))]
   if (!ids.length) return { ok: true as const, booked: [] as BookedLine[] }
 
   // normalizeBigInt returns `any`, which would otherwise erase ItemRow through
@@ -133,7 +190,7 @@ export async function resolveBookedLines(lines: Map<number, RequestedLine>) {
     if (!row.is_active) return { ok: false as const, error: `Item "${row.name}" is not active` }
   }
 
-  const pricedIds = ids.filter(id => lines.get(id)!.unit_price !== null)
+  const pricedIds = [...new Set(lines.filter(line => line.unit_price !== null).map(line => line.item_id))]
   const knownPrices = new Map<number, Set<string>>()
   for (const id of pricedIds) {
     const row = itemsById.get(id)!
@@ -152,28 +209,31 @@ export async function resolveBookedLines(lines: Map<number, RequestedLine>) {
       knownPrices.get(Number(history.item_id))?.add(priceKey(history.price, history.deposit))
     }
 
-    for (const id of pricedIds) {
-      const line = lines.get(id)!
-      if (!knownPrices.get(id)!.has(priceKey(line.unit_price, line.unit_deposit))) {
-        return { ok: false as const, error: `Price of item "${itemsById.get(id)!.name}" does not match any known price` }
+    for (const line of lines) {
+      if (line.unit_price === null) continue
+      if (!knownPrices.get(line.item_id)!.has(priceKey(line.unit_price, line.unit_deposit))) {
+        return { ok: false as const, error: `Price of item "${itemsById.get(line.item_id)!.name}" does not match any known price` }
       }
     }
   }
 
-  const booked: BookedLine[] = ids.map((id) => {
-    const row = itemsById.get(id)!
-    const line = lines.get(id)!
-    const quantity = line.quantity
+  const booked: BookedLine[] = lines.map((line) => {
+    const row = itemsById.get(line.item_id)!
     const unitPrice = line.unit_price ?? Number(row.price)
     const unitDeposit = line.unit_deposit ?? Number(row.deposit ?? 0)
+    const lineKind: LineKind = line.voucher_code ? 'voucher_redemption' : 'item'
 
     return {
-      item_id: id,
+      item_id: line.item_id,
       name: String(row.name),
-      quantity,
+      quantity: line.quantity,
       unit_price: unitPrice,
       unit_deposit: unitDeposit,
-      line_total: round2(quantity * (unitPrice + unitDeposit)),
+      line_kind: lineKind,
+      voucher_id: null,
+      voucher_code: line.voucher_code,
+      voucher_covers_deposit: false,
+      line_total: lineCashTotal({ line_kind: lineKind, quantity: line.quantity, unit_price: unitPrice, unit_deposit: unitDeposit }),
     }
   })
 
@@ -183,6 +243,32 @@ export async function resolveBookedLines(lines: Map<number, RequestedLine>) {
 export function bookedTotal(booked: BookedLine[], isFachschaft: boolean) {
   if (isFachschaft) return 0
   return round2(booked.reduce((sum, line) => sum + line.line_total, 0))
+}
+
+/** Booked lines from stored order_items rows (snapshot columns plus the voucher's code). */
+export function bookedLineFromRow(row: {
+  item_id: unknown
+  item_name: unknown
+  quantity: unknown
+  unit_price: unknown
+  unit_deposit: unknown
+  line_kind: unknown
+  voucher_id: unknown
+  voucher_code: unknown
+  voucher_covers_deposit: unknown
+}): BookedLine {
+  const line = {
+    item_id: row.item_id == null ? null : Number(row.item_id),
+    name: String(row.item_name),
+    quantity: Number(row.quantity),
+    unit_price: Number(row.unit_price),
+    unit_deposit: Number(row.unit_deposit),
+    line_kind: (row.line_kind ?? 'item') as LineKind,
+    voucher_id: row.voucher_id == null ? null : Number(row.voucher_id),
+    voucher_code: row.voucher_code == null ? null : String(row.voucher_code),
+    voucher_covers_deposit: Boolean(Number(row.voucher_covers_deposit)),
+  }
+  return { ...line, line_total: lineCashTotal(line) }
 }
 
 /**
@@ -222,28 +308,17 @@ export async function findCommittedCheckout(clientUuid: string) {
 
   let lines: BookedLine[] = []
   if (order) {
-    const rows = await query<Array<{
-      item_id: number | null
-      item_name: string
-      quantity: number
-      unit_price: string | number
-      unit_deposit: string | number
-    }>>(
-      `SELECT item_id, item_name, quantity, unit_price, unit_deposit
-       FROM order_items
-       WHERE order_id = ?
-       ORDER BY id`,
+    const rows = await query<any[]>(
+      `SELECT oi.item_id, oi.item_name, oi.quantity, oi.unit_price, oi.unit_deposit,
+         oi.line_kind, oi.voucher_id, v.code AS voucher_code, oi.voucher_covers_deposit
+       FROM order_items oi
+       LEFT JOIN vouchers v ON v.id = oi.voucher_id
+       WHERE oi.order_id = ?
+       ORDER BY oi.id`,
       [order.id],
     )
 
-    lines = rows.map(row => ({
-      item_id: Number(row.item_id),
-      name: String(row.item_name),
-      quantity: Number(row.quantity),
-      unit_price: Number(row.unit_price),
-      unit_deposit: Number(row.unit_deposit),
-      line_total: round2(Number(row.quantity) * (Number(row.unit_price) + Number(row.unit_deposit))),
-    }))
+    lines = rows.map(bookedLineFromRow)
   }
 
   return {
