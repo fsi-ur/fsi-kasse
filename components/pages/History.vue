@@ -37,6 +37,12 @@
               tone="success"
             />
             <span v-else>{{ t('history.typeSale') }}</span>
+            <CommonStatusBadge
+              v-if="hasPendingChange(row)"
+              class="ml-2"
+              :label="t('orderChanges.pendingBadge')"
+              tone="warning"
+            />
           </template>
 
           <!-- Compact cards read as a receipt line, not as a list of table cells. -->
@@ -59,6 +65,11 @@
               v-else-if="row.is_fachschaft"
               :label="t('history.fachschaftBadge')"
               tone="success"
+            />
+            <CommonStatusBadge
+              v-if="hasPendingChange(row)"
+              :label="t('orderChanges.pendingBadge')"
+              tone="warning"
             />
           </template>
         </CommonAdvancedTable>
@@ -114,12 +125,48 @@
       {{ t('common.total') }}: {{ formatCurrency(entryTotal(openedOrder)) }}
     </div>
 
+    <div
+      v-if="openedOrder?.change_request"
+      class="rounded-lg px-3 py-2 text-sm space-y-2"
+      :class="{
+        'bg-warning-50 text-warning-900': openedOrder.change_request.status === 'pending',
+        'bg-success-50 text-success-900': openedOrder.change_request.status === 'approved',
+        'bg-danger-50 text-danger-900': openedOrder.change_request.status === 'rejected',
+      }"
+    >
+      <p class="font-semibold">{{ changeRequestInfo(openedOrder.change_request) }}</p>
+      <p v-if="openedOrder.change_request.review_note" class="whitespace-pre-line">
+        {{ t('orderChanges.reviewNote') }}: {{ openedOrder.change_request.review_note }}
+      </p>
+      <PagesOrderChangesDiff
+        v-if="openedOrder.change_request.status === 'pending'"
+        class="text-base-900"
+        :request="openedOrder.change_request"
+      />
+    </div>
+
     <template #footer>
+      <button
+        v-if="openedOrder && !isDonationOnly(openedOrder) && !hasPendingChange(openedOrder)"
+        class="btn-outline mr-auto inline-flex items-center gap-2"
+        :disabled="stale || !isOnline"
+        :title="stale || !isOnline ? t('orderChanges.offline') : undefined"
+        @click="openEditor"
+      >
+        <Icon name="material-symbols:edit-outline-rounded" class="h-4 w-4" aria-hidden="true" />
+        {{ t('orderChanges.request') }}
+      </button>
       <button class="btn-secondary" @click="showOrderModal = false">
         {{ t('actions.close') }}
       </button>
     </template>
   </CommonModal>
+
+  <PagesOrderChangesEditor
+    v-model="showEditor"
+    :order="editedOrder"
+    @submitted="loadHistory"
+  />
 </template>
 
 <script setup lang="ts">
@@ -129,11 +176,13 @@ import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
 import type { AdvancedTableColumn } from '~/composables/useAdvancedTable'
 import { cachedFetch } from '~/composables/useCachedFetch'
 import { onOfflineDataChanged } from '~/composables/useOfflineQueue'
+import { useConnectivity } from '~/composables/useConnectivity'
 
 const { selectedEvent } = useCheckout()
 const { t } = useI18n()
 const { formatCurrency, formatDateTime } = useLocaleFormatters()
 const { onRefresh } = useAppRefresh()
+const { isOnline } = useConnectivity()
 
 const emit = defineEmits<{
   (e: 'openMenu'): void
@@ -146,6 +195,8 @@ const showOrderModal = ref(false)
 const openedOrder = ref<any | null>(null)
 const stale = ref(false)
 const cachedAt = ref<number | null>(null)
+const showEditor = ref(false)
+const editedOrder = ref<any | null>(null)
 
 function orderTotal(order: any) {
   return order.items
@@ -225,6 +276,26 @@ const columns = computed<AdvancedTableColumn<any>[]>(() => [
 function openOrder(order: any) {
   openedOrder.value = order
   showOrderModal.value = true
+}
+
+function hasPendingChange(entry: any) {
+  return entry.change_request?.status === 'pending'
+}
+
+function changeRequestInfo(request: any) {
+  if (request.status === 'approved') {
+    return t('orderChanges.approvedInfo', { date: formatDateTime(request.reviewed_at), name: request.reviewed_by ?? '' })
+  }
+  if (request.status === 'rejected') {
+    return t('orderChanges.rejectedInfo', { date: formatDateTime(request.reviewed_at), name: request.reviewed_by ?? '' })
+  }
+  return t('orderChanges.pendingInfo', { date: formatDateTime(request.created_at) })
+}
+
+function openEditor() {
+  editedOrder.value = openedOrder.value
+  showOrderModal.value = false
+  showEditor.value = true
 }
 
 async function loadHistory() {

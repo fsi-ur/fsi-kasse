@@ -203,7 +203,22 @@ export async function findCommittedCheckout(clientUuid: string) {
   )
   const donation = donations[0]
 
-  if (!order && !donation) return null
+  if (!order && !donation) {
+    const cancelled = await query<Array<{ id: number }>>(
+      `SELECT r.id
+       FROM order_change_requests r
+       WHERE r.order_client_uuid = ?
+         AND r.status = 'approved'
+         AND NOT EXISTS (
+           SELECT 1 FROM order_change_request_lines l WHERE l.request_id = r.id AND l.version = 'proposed'
+         )
+       LIMIT 1`,
+      [clientUuid],
+    )
+    if (!cancelled[0]) return null
+
+    return { ok: true as const, duplicate: true, order_id: null, total: 0, lines: [] as BookedLine[], donation_amount: 0 }
+  }
 
   let lines: BookedLine[] = []
   if (order) {

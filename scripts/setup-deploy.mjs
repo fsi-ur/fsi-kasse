@@ -11,6 +11,7 @@ const steps = [
   { label: 'guests and affiliations migration', command: 'node', args: ['scripts/migrate-guests-and-affiliations.mjs'], required: true, attempts: 6 },
   { label: 'stands migration', command: 'node', args: ['scripts/migrate-stands.mjs'], required: true, attempts: 6 },
   { label: 'fachschaft enabled migration', command: 'node', args: ['scripts/migrate-fachschaft-enabled.mjs'], required: true, attempts: 6 },
+  { label: 'order change requests migration', command: 'node', args: ['scripts/migrate-order-change-requests.mjs'], required: true, attempts: 6 },
   { label: 'admin seed', command: 'node', args: ['scripts/seed-admin.mjs'], required: true, attempts: 6 },
   { label: 'connection database user', command: 'node', args: ['scripts/create-connection-db-user.mjs'], required: false },
 ]

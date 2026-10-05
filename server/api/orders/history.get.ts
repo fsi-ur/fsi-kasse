@@ -2,6 +2,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import { query } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
+import { loadChangeRequests, type OrderChangeRequest } from '~/server/utils/orderChanges'
 
 export default defineEventHandler(async (event) => {
   const current = await requirePermission(event, 'cash_register.use')
@@ -69,6 +70,12 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  const changeRequestByOrder = new Map<number, OrderChangeRequest>()
+  for (const request of await loadChangeRequests({ eventId }, false)) {
+    const latest = changeRequestByOrder.get(request.order_id)
+    if (!latest || request.id > latest.id) changeRequestByOrder.set(request.order_id, request)
+  }
+
   const data = normalizeBigInt(rows)
   const orders: any[] = []
   const ordersById = new Map<number, any>()
@@ -83,6 +90,7 @@ export default defineEventHandler(async (event) => {
         is_fachschaft: row.fachschaft,
         created_at: row.created_at,
         donation: donationByOrder.get(row.order_id) ?? 0,
+        change_request: changeRequestByOrder.get(row.order_id) ?? null,
         items: []
       }
       ordersById.set(row.order_id, order)

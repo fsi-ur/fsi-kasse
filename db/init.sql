@@ -211,3 +211,40 @@ CREATE TABLE IF NOT EXISTS donations (
   FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
   CONSTRAINT fk_donations_stand FOREIGN KEY (stand_id) REFERENCES stands(id)
 );
+
+CREATE TABLE IF NOT EXISTS order_change_requests (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  order_id BIGINT UNSIGNED NOT NULL,
+  event_id BIGINT UNSIGNED NOT NULL,
+  order_client_uuid CHAR(36) NULL,
+  cashier_id BIGINT UNSIGNED NULL,
+  status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+  reason TEXT NULL,
+  original_fachschaft TINYINT(1) NOT NULL DEFAULT 0,
+  proposed_fachschaft TINYINT(1) NOT NULL DEFAULT 0,
+  requested_by VARCHAR(255) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  reviewed_by VARCHAR(255) NULL,
+  reviewed_at TIMESTAMP NULL,
+  review_note TEXT NULL,
+  INDEX idx_order_change_requests_order (order_id, status),
+  INDEX idx_order_change_requests_status (status, created_at),
+  INDEX idx_order_change_requests_event (event_id),
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+  FOREIGN KEY (cashier_id) REFERENCES cashiers(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS order_change_request_lines (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  request_id BIGINT UNSIGNED NOT NULL,
+  version ENUM('original', 'proposed') NOT NULL,
+  order_item_id BIGINT UNSIGNED NULL,
+  item_id BIGINT UNSIGNED NULL,
+  item_name VARCHAR(255) NOT NULL,
+  quantity INT NOT NULL,
+  unit_price DECIMAL(10,2) NOT NULL,
+  unit_deposit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  INDEX idx_order_change_request_lines_request (request_id, version),
+  FOREIGN KEY (request_id) REFERENCES order_change_requests(id) ON DELETE CASCADE,
+  FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE SET NULL
+);
