@@ -21,7 +21,8 @@ import { onOfflineDataChanged } from '~/composables/useOfflineQueue'
 
 const events = ref<any[]>([])
 const query = ref('')
-const { selectedEvent, selectedEventName } = useCheckout()
+const { selectedEvent, selectedEventName, selectedEventAffiliations, selectedStand } = useCheckout()
+const { user } = useAuth()
 const { t } = useI18n()
 const { formatLocalDateTime } = useLocaleFormatters()
 
@@ -53,6 +54,16 @@ function findActiveEvent(list: any[]) {
 
 watch(selectedLabel, (label) => {
   selectedEventName.value = label
+}, { immediate: true })
+
+const selectedEntry = computed(() => events.value.find(entry => entry.id === selectedEvent.value) ?? null)
+
+watch(selectedEntry, (entry) => {
+  selectedEventAffiliations.value = entry ? (entry.affiliations ?? []) : null
+
+  // A scoped guest only gets their own entry back; preselect its stand when it runs exactly one.
+  const ownStands = user.value?.kind === 'guest' ? (entry?.affiliations?.[0]?.stands ?? []) : []
+  if (ownStands.length === 1 && !selectedStand.value) selectedStand.value = Number(ownStands[0].id)
 }, { immediate: true })
 
 function onSelect(value: unknown) {

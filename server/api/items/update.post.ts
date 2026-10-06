@@ -1,6 +1,7 @@
 import { defineEventHandler, readBody } from 'h3'
 import { query, withTransaction } from '~/server/utils/db'
-import { requirePermission } from '~/server/utils/api/guards'
+import { hasPermission, requirePermission } from '~/server/utils/api/guards'
+import { getOwnedItemIds, getOwnedStandIds } from '~/server/utils/stands'
 import { normalizeBigInt } from '~/server/utils/normalize'
 
 interface ItemRow {
@@ -11,13 +12,19 @@ interface ItemRow {
 }
 
 export default defineEventHandler(async (event) => {
-  const current = await requirePermission(event, 'cash_register.manage')
+  const current = await requirePermission(event, 'cash_register.guest_manage')
   if (!current.ok) return current
 
   const { id, name, price, deposit = 0 } = await readBody(event)
 
   const itemId = Number(id)
   if (!Number.isInteger(itemId) || itemId <= 0) return { ok: false, error: 'Missing or invalid ID' }
+
+  // Guest managers may only edit items no other affiliation's stand sells.
+  if (!hasPermission(current.user, 'cash_register.manage')) {
+    const ownedItemIds = await getOwnedItemIds(await getOwnedStandIds(current.user))
+    if (!ownedItemIds.includes(itemId)) return { ok: false, error: 'Artikel darf nicht bearbeitet werden' }
+  }
 
   const trimmedName = typeof name === 'string' ? name.trim() : ''
   if (!trimmedName || trimmedName.length > 255) return { ok: false, error: 'Missing or invalid name' }

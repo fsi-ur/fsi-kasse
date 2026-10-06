@@ -1,13 +1,22 @@
 import { defineEventHandler, readBody } from 'h3'
 import { query, withTransaction } from '~/server/utils/db'
-import { requirePermission } from '~/server/utils/api/guards'
+import { hasPermission, requirePermission } from '~/server/utils/api/guards'
+import { getOwnedStandIds } from '~/server/utils/stands'
 import { normalizeBigInt } from '~/server/utils/normalize'
 
 export default defineEventHandler(async (event) => {
-  const current = await requirePermission(event, 'cash_register.manage')
+  const current = await requirePermission(event, 'cash_register.guest_manage')
   if (!current.ok) return current
 
-  const { name, price, deposit = 0, image, is_active = 1 } = await readBody(event)
+  const { name, price, deposit = 0, image, is_active = 1, stand_id } = await readBody(event)
+
+  // Guest managers create items only for one of their stands, linked in the
+  // same transaction so the new item is theirs to edit from the start.
+  let guestStandId: number | null = null
+  if (!hasPermission(current.user, 'cash_register.manage')) {
+    guestStandId = Number(stand_id)
+    if (!(await getOwnedStandIds(current.user)).includes(guestStandId)) return { ok: false, error: 'Stand nicht gefunden' }
+  }
 
   const trimmedName = typeof name === 'string' ? name.trim() : ''
   if (!trimmedName || trimmedName.length > 255) return { ok: false, error: 'Missing or invalid name' }
@@ -36,6 +45,10 @@ export default defineEventHandler(async (event) => {
       [id, trimmedName, roundedPrice, roundedDeposit, current.user?.username ?? null],
       conn,
     )
+
+    if (guestStandId !== null) {
+      await query(`INSERT INTO stand_items (stand_id, item_id) VALUES (?, ?)`, [guestStandId, id], conn)
+    }
 
     return id
   })

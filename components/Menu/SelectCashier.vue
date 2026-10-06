@@ -20,18 +20,31 @@ import { onOfflineDataChanged } from '~/composables/useOfflineQueue'
 
 const cashiers = ref<any[]>([])
 const query = ref('')
-const { selectedCashier, selectedCashierName } = useCheckout()
+const { selectedCashier, selectedCashierName, selectedEventAffiliations } = useCheckout()
 const { t } = useI18n()
 
-const options = computed<SearchSelectOption[]>(() => cashiers.value.map(cashier => ({
+// Affiliated guest cashiers only work events that allow their affiliation (the server enforces it too).
+const eventCashiers = computed(() => {
+  const allowed = selectedEventAffiliations.value
+  if (!allowed) return cashiers.value
+  const allowedIds = new Set(allowed.map(entry => entry.affiliation_id))
+  return cashiers.value.filter(cashier => !cashier.is_guest || cashier.affiliation_id == null || allowedIds.has(cashier.affiliation_id))
+})
+
+const options = computed<SearchSelectOption[]>(() => eventCashiers.value.map(cashier => ({
   key: cashier.id,
   label: String(cashier.name),
   value: cashier.id,
 })))
 
 const selectedLabel = computed(() => {
-  const cashier = cashiers.value.find(entry => entry.id === selectedCashier.value)
+  const cashier = eventCashiers.value.find(entry => entry.id === selectedCashier.value)
   return cashier ? String(cashier.name) : ''
+})
+
+watch(eventCashiers, (list) => {
+  if (!cashiers.value.length || !selectedCashier.value) return
+  if (!list.some(entry => entry.id === selectedCashier.value)) selectedCashier.value = ''
 })
 
 watch(selectedLabel, (label) => {

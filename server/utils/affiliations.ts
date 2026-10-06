@@ -38,6 +38,69 @@ export function canAccessAffiliation(actor: User, targetAffiliationId: number | 
   return targetAffiliationId === scope
 }
 
+export interface EventAffiliation {
+  affiliation_id: number
+  affiliation_name: string
+  /** The stands this affiliation runs at the event; may be shared with other affiliations. */
+  stands: Array<{ id: number, name: string }>
+}
+
+/** Event allowlists keyed by local event id. An event without entries is closed to scoped guests. */
+export async function listEventAffiliations(): Promise<Map<number, EventAffiliation[]>> {
+  const rows = await query<any[]>(
+    `SELECT ea.event_id, ea.affiliation_id, a.name AS affiliation_name
+     FROM event_affiliations ea
+     JOIN affiliations a ON a.id = ea.affiliation_id
+     ORDER BY a.name ASC`,
+  )
+  const standRows = await query<any[]>(
+    `SELECT eas.event_id, eas.affiliation_id, s.id, s.name
+     FROM event_affiliation_stands eas
+     JOIN stands s ON s.id = eas.stand_id
+     ORDER BY s.name ASC`,
+  )
+
+  const standsByEntry = new Map<string, Array<{ id: number, name: string }>>()
+  for (const row of standRows) {
+    const key = `${row.event_id}:${row.affiliation_id}`
+    if (!standsByEntry.has(key)) standsByEntry.set(key, [])
+    standsByEntry.get(key)!.push({ id: Number(row.id), name: String(row.name) })
+  }
+
+  const byEvent = new Map<number, EventAffiliation[]>()
+  for (const row of rows) {
+    const eventId = Number(row.event_id)
+    if (!byEvent.has(eventId)) byEvent.set(eventId, [])
+    byEvent.get(eventId)!.push({
+      affiliation_id: Number(row.affiliation_id),
+      affiliation_name: String(row.affiliation_name),
+      stands: standsByEntry.get(`${row.event_id}:${row.affiliation_id}`) ?? [],
+    })
+  }
+  return byEvent
+}
+
+async function isAffiliationAllowedAtEvent(affiliationId: number, eventId: number) {
+  const rows = await query<any[]>(
+    `SELECT 1 AS allowed FROM event_affiliations WHERE event_id = ? AND affiliation_id = ? LIMIT 1`,
+    [eventId, affiliationId],
+  )
+  return rows.length > 0
+}
+
+/** Regular users and unaffiliated guests may use every event; scoped guests only those that allow their affiliation. */
+export async function canAccessEvent(actor: User, eventId: number) {
+  const scope = getActorScope(actor)
+  if (scope == null) return true
+  return isAffiliationAllowedAtEvent(scope, eventId)
+}
+
+/** Member cashiers and unaffiliated guest cashiers work every event; affiliated guest cashiers only allowed ones. */
+export async function canCashierWorkEvent(cashier: { is_guest: boolean, affiliation_id: number | null }, eventId: number) {
+  if (!cashier.is_guest || cashier.affiliation_id == null) return true
+  return isAffiliationAllowedAtEvent(cashier.affiliation_id, eventId)
+}
+
 export async function resolveAssignableAffiliation(
   actor: User,
   requested: unknown,

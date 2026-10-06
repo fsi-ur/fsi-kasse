@@ -5,7 +5,7 @@ import { normalizeBigInt } from '~/server/utils/normalize'
 import { getCashRegisterCashierById } from '~/server/utils/cashiers'
 import { getCashRegisterEventById } from '~/server/utils/events'
 import { getCashRegisterSettings, isKnownFachschaftPaymentAmount } from '~/server/utils/appSettings'
-import { isDuplicateEntryError, normalizeClientUuid } from '~/server/utils/checkout'
+import { isDuplicateEntryError, normalizeClientUuid, validateEventAccess } from '~/server/utils/checkout'
 
 async function findCommittedPayment(clientUuid: string) {
   const rows = await query<Array<{ id: number, amount: string | number }>>(
@@ -73,6 +73,9 @@ export default defineEventHandler(async (event) => {
   if (!selectedEvent.is_active) {
     return { ok: false, error: 'Selected event is not active' }
   }
+
+  const blocked = await validateEventAccess(current.user, selectedCashier, selectedEvent.id)
+  if (blocked) return blocked
 
   if (!selectedEvent.fachschaft_enabled) {
     return { ok: false, error: 'Fachschaft payments are disabled for this event' }

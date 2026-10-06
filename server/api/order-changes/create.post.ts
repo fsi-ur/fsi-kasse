@@ -1,6 +1,7 @@
 import { defineEventHandler, readBody } from 'h3'
 import { query, withTransaction } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
+import { canAccessEvent } from '~/server/utils/affiliations'
 import { normalizeBigInt } from '~/server/utils/normalize'
 import { normalizeLines, resolveBookedLines } from '~/server/utils/checkout'
 import { getCashRegisterCashierById } from '~/server/utils/cashiers'
@@ -93,6 +94,7 @@ export default defineEventHandler(async (event) => {
     [orderId],
   )) as Array<{ event_id: number, created_at: string }>
   if (!orderRows[0]) return { ok: false, error: 'Order does not exist' }
+  if (!await canAccessEvent(current.user, Number(orderRows[0].event_id))) return { ok: false, error: 'Not authorized' }
   const ctx: VoucherCheckContext = { eventId: Number(orderRows[0].event_id), at: utcToBerlinLocal(String(orderRows[0].created_at)) }
 
   // Checks that don't depend on units: the voucher fits the order's event and

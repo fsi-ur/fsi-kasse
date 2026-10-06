@@ -1,6 +1,7 @@
 import { defineEventHandler, readBody } from 'h3'
 import { query } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
+import { canAccessEvent } from '~/server/utils/affiliations'
 import {
   berlinLocalNow,
   checkRedeemable,
@@ -41,6 +42,7 @@ export default defineEventHandler(async (event) => {
   } else {
     ctx = { eventId: null, at: berlinLocalNow() }
   }
+  if (ctx.eventId != null && !await canAccessEvent(current.user, ctx.eventId)) return { ok: false, error: 'Not authorized' }
 
   const voucher = await loadVoucherByCode(normalized.code)
   if (!voucher) return { ok: false, error: 'Gutschein nicht gefunden' }

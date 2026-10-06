@@ -6,6 +6,7 @@
         :placeholder="placeholder"
         :disabled="disabled"
         class="input w-full"
+        :class="inputClass"
         @focus="onFocus"
         @input="onInput"
         @keydown="onKeydown"
@@ -107,6 +108,10 @@ const props = defineProps({
     default: false,
   },
   optionClass: {
+    type: String,
+    default: '',
+  },
+  inputClass: {
     type: String,
     default: '',
   },

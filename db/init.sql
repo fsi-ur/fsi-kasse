@@ -93,6 +93,27 @@ CREATE TABLE IF NOT EXISTS affiliations (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS event_affiliations (
+  event_id BIGINT UNSIGNED NOT NULL,
+  affiliation_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (event_id, affiliation_id),
+  INDEX idx_event_affiliations_affiliation (affiliation_id),
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+  FOREIGN KEY (affiliation_id) REFERENCES affiliations(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS event_affiliation_stands (
+  event_id BIGINT UNSIGNED NOT NULL,
+  affiliation_id BIGINT UNSIGNED NOT NULL,
+  stand_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (event_id, affiliation_id, stand_id),
+  INDEX idx_event_affiliation_stands_affiliation (affiliation_id, stand_id),
+  INDEX idx_event_affiliation_stands_stand (stand_id),
+  CONSTRAINT fk_event_affiliation_stands_access FOREIGN KEY (event_id, affiliation_id)
+    REFERENCES event_affiliations(event_id, affiliation_id) ON DELETE CASCADE,
+  CONSTRAINT fk_event_affiliation_stands_stand FOREIGN KEY (stand_id) REFERENCES stands(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS guest_users (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(255) NOT NULL UNIQUE,

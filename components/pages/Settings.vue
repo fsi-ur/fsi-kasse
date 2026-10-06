@@ -31,12 +31,13 @@ import SettingsEvents from './settings/Events.vue'
 import SettingsUsers from './settings/Users.vue'
 import SettingsGuests from './settings/Guests.vue'
 import SettingsAffiliations from './settings/Affiliations.vue'
+import SettingsGuestStands from './settings/GuestStands.vue'
 
 defineEmits<{
   (e: 'openMenu'): void
 }>()
 
-type SettingsTab = 'general' | 'cashRegister' | 'items' | 'stands' | 'itemGroups' | 'cashiers' | 'events' | 'users' | 'guests' | 'affiliations'
+type SettingsTab = 'general' | 'cashRegister' | 'items' | 'stands' | 'itemGroups' | 'cashiers' | 'events' | 'users' | 'guests' | 'affiliations' | 'myStands'
 
 const currentTab = useState<SettingsTab>('settings-overview-current-tab', () => 'general')
 const { t } = useI18n()
@@ -44,11 +45,12 @@ const { pageMeta, setPage } = usePage()
 const { isOnline } = useConnectivity()
 const { user, hasPermission } = useAuth()
 
-// Guest managers reach Settings too, but only see `general` and `guests`.
+// Guest managers reach Settings too, but only see `general`, `guests` and their own stands.
 const tabs = computed(() => {
   const canManage = hasPermission('cash_register.manage')
   const canManageGuests = hasPermission('cash_register.guest_manage')
   const canManageAffiliations = canManage && user.value?.kind !== 'guest'
+  const canManageOwnStands = !canManage && canManageGuests && user.value?.kind === 'guest' && user.value.affiliation_id != null
 
   return [
     { key: 'general', label: t('settings.tabs.general'), visible: true },
@@ -60,6 +62,7 @@ const tabs = computed(() => {
     { key: 'events', label: t('settings.tabs.events'), visible: canManage },
     { key: 'users', label: t('settings.tabs.users'), visible: canManage },
     { key: 'guests', label: t('settings.tabs.guests'), visible: canManageGuests },
+    { key: 'myStands', label: t('settings.tabs.myStands'), visible: canManageOwnStands },
     { key: 'affiliations', label: t('settings.tabs.affiliations'), visible: canManageAffiliations },
   ]
     .filter(tab => tab.visible)
@@ -90,6 +93,8 @@ const activeComponent = computed(() => {
       return SettingsGuests
     case 'affiliations':
       return SettingsAffiliations
+    case 'myStands':
+      return SettingsGuestStands
     case 'general':
     default:
       return SettingsGeneral

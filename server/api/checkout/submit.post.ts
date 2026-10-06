@@ -89,7 +89,7 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'Missing or invalid order items' }
   }
 
-  const invalid = await validateCashierAndEvent(cashierId, eventId)
+  const invalid = await validateCashierAndEvent(current.user, cashierId, eventId)
   if (invalid) return invalid
 
   const standId = await resolveStandId(body?.stand_id)

@@ -2,6 +2,8 @@ import { query } from '~/server/utils/db'
 import { normalizeBigInt } from '~/server/utils/normalize'
 import { getCashRegisterCashierById } from '~/server/utils/cashiers'
 import { getCashRegisterEventById } from '~/server/utils/events'
+import { canAccessEvent, canCashierWorkEvent } from '~/server/utils/affiliations'
+import type { User } from '~/types/user'
 import { normalizeVoucherCode } from '~/utils/voucherCode'
 
 interface ItemRow {
@@ -143,7 +145,7 @@ function priceKey(price: unknown, deposit: unknown) {
   return `${toCents(price)}|${toCents(deposit)}`
 }
 
-export async function validateCashierAndEvent(cashierId: number, eventId: number) {
+export async function validateCashierAndEvent(actor: User, cashierId: number, eventId: number) {
   const selectedCashier = await getCashRegisterCashierById(cashierId)
   if (!selectedCashier) {
     return { ok: false as const, error: 'Selected cashier does not exist' }
@@ -160,6 +162,24 @@ export async function validateCashierAndEvent(cashierId: number, eventId: number
     return { ok: false as const, error: 'Selected event is not active' }
   }
 
+  const blocked = await validateEventAccess(actor, selectedCashier, eventId)
+  if (blocked) return blocked
+
+  return null
+}
+
+/** The event allowlist: a scoped guest and an affiliated guest cashier both need their affiliation allowed. */
+export async function validateEventAccess(
+  actor: User,
+  cashier: { is_guest: boolean, affiliation_id: number | null },
+  eventId: number,
+) {
+  if (!await canAccessEvent(actor, eventId)) {
+    return { ok: false as const, error: 'Veranstaltung ist für deine Zugehörigkeit nicht freigegeben' }
+  }
+  if (!await canCashierWorkEvent(cashier, eventId)) {
+    return { ok: false as const, error: 'Kassierer ist für diese Veranstaltung nicht freigegeben' }
+  }
   return null
 }
 

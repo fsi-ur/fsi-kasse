@@ -38,7 +38,7 @@
         </div>
       </div>
 
-      <p class="text-sm text-base-600">{{ t('items.priceChangeNotice') }}</p>
+      <p v-if="!isNewItem" class="text-sm text-base-600">{{ t('items.priceChangeNotice') }}</p>
 
       <div v-if="!isNewItem && priceHistory.length > 0" class="rounded-lg border border-base-200 p-3">
         <h4 class="font-semibold text-sm mb-2">{{ t('items.priceHistory') }}</h4>

@@ -1,6 +1,7 @@
 import { defineEventHandler, getQuery } from 'h3'
 import { query } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
+import { canAccessEvent } from '~/server/utils/affiliations'
 import { normalizeBigInt } from '~/server/utils/normalize'
 
 export default defineEventHandler(async (event) => {
@@ -11,6 +12,7 @@ export default defineEventHandler(async (event) => {
   if (!eventId) {
     return { ok: false, error: 'Missing eventId' }
   }
+  if (!await canAccessEvent(current.user, eventId)) return { ok: false, error: 'Not authorized' }
 
   const rows = await query(`
     SELECT 

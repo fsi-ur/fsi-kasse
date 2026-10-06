@@ -64,9 +64,12 @@ export const useCheckout = () => {
   const paidAmount = usePersistedState<number>('paidAmount', () => 0, nonNegativeAmount)
   const selectedCashierName = useState<string>('selectedCashierName', () => '')
   const selectedEventName = useState<string>('selectedEventName', () => '')
+  /** Affiliations allowed at the selected event; null until the event list has loaded. */
+  const selectedEventAffiliations = useState<Array<{ affiliation_id: number, stands: Array<{ id: number, name: string }> }> | null>(
+    'selectedEventAffiliations', () => null)
 
   return {
     selectedCashier, selectedEvent, selectedCashierName, selectedEventName, orderItems, isFachschaft,
-    donationMode, directDonation, paidAmount, selectedStand, showAllItems,
+    donationMode, directDonation, paidAmount, selectedStand, showAllItems, selectedEventAffiliations,
   }
 }

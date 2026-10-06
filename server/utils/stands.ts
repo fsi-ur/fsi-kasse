@@ -1,5 +1,7 @@
 import type * as mariadb from 'mariadb'
+import type { User } from '~/types/user'
 import { query } from '~/server/utils/db'
+import { getActorScope } from '~/server/utils/affiliations'
 
 export interface Stand {
   id: number
@@ -74,4 +76,38 @@ export async function replaceStandItems(standId: number, itemIds: number[], conn
   for (const itemId of itemIds) {
     await query(`INSERT INTO stand_items (stand_id, item_id) VALUES (?, ?)`, [standId, itemId], conn)
   }
+}
+
+/** Stands the actor's affiliation runs at an active event. Only scoped guests own stands. */
+export async function getOwnedStandIds(actor: User): Promise<number[]> {
+  const scope = getActorScope(actor)
+  if (scope == null) return []
+
+  const rows = await query<Array<{ stand_id: unknown }>>(
+    `SELECT DISTINCT eas.stand_id
+     FROM event_affiliation_stands eas
+     JOIN events e ON e.id = eas.event_id
+     WHERE eas.affiliation_id = ? AND e.is_active = 1`,
+    [scope],
+  )
+  return rows.map(row => Number(row.stand_id))
+}
+
+/**
+ * Items the owner of `standIds` may edit: sold at one of those stands and at
+ * no other, so a price change never reaches another affiliation's stand.
+ */
+export async function getOwnedItemIds(standIds: number[]): Promise<number[]> {
+  if (!standIds.length) return []
+
+  const placeholders = standIds.map(() => '?').join(', ')
+  const rows = await query<Array<{ item_id: unknown }>>(
+    `SELECT item_id
+     FROM stand_items
+     GROUP BY item_id
+     HAVING SUM(stand_id IN (${placeholders})) > 0
+        AND SUM(stand_id NOT IN (${placeholders})) = 0`,
+    [...standIds, ...standIds],
+  )
+  return rows.map(row => Number(row.item_id))
 }
