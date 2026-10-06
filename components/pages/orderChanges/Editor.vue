@@ -18,29 +18,29 @@
         <span class="col-span-2 flex items-center gap-1">
           <button
             type="button"
-            class="btn-secondary px-2! py-1!"
+            class="btn-secondary inline-flex h-9 w-9 shrink-0 items-center justify-center p-0!"
             :aria-label="t('orderChanges.decrease')"
             :disabled="line.quantity === 0"
             @click="changeQuantity(line, -1)"
           >
-            <Icon name="material-symbols:remove-rounded" class="h-4 w-4" aria-hidden="true" />
+            <Icon name="material-symbols:remove-rounded" class="block h-5 w-5" aria-hidden="true" />
           </button>
           <span class="w-8 text-center" :class="{ 'font-semibold': line.quantity !== line.originalQuantity }">
             {{ line.quantity }}
           </span>
           <button
             type="button"
-            class="btn-secondary px-2! py-1!"
+            class="btn-secondary inline-flex h-9 w-9 shrink-0 items-center justify-center p-0!"
             :aria-label="t('orderChanges.increase')"
             :disabled="!canIncrease(line)"
             @click="changeQuantity(line, 1)"
           >
-            <Icon name="material-symbols:add-rounded" class="h-4 w-4" aria-hidden="true" />
+            <Icon name="material-symbols:add-rounded" class="block h-5 w-5" aria-hidden="true" />
           </button>
         </span>
-        <span class="col-span-3" :class="{ 'line-through text-base-500': line.quantity === 0 }">
-          {{ line.name }}
-          <span v-if="line.kind === 'item' && line.deposit > 0" class="text-xs text-base-500">
+        <span class="col-span-3">
+          <span :class="{ 'line-through text-base-500': line.quantity === 0 }">{{ line.name }}</span>
+          <span v-if="line.kind === 'item' && line.deposit > 0" class="ml-1 text-xs text-base-500">
             {{ t('checkout.depositSuffix', { amount: formatCurrency(line.deposit) }) }}
           </span>
           <span v-if="line.voucherCode" class="mt-0.5 flex items-center gap-1">
