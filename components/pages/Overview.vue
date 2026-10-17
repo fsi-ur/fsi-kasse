@@ -100,6 +100,53 @@
           </div>
         </div>
 
+        <div v-if="showDeposits" class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
+          <h2 class="text-lg font-semibold mb-4">{{ t('overview.deposits.title') }}</h2>
+
+          <div class="grid grid-cols-[minmax(0,1fr)_repeat(3,5rem)] gap-x-4 text-xs text-base-500 pb-1 border-b border-base-200">
+            <span>{{ t('overview.deposits.amount') }}</span>
+            <span class="text-right">{{ t('overview.deposits.issued') }}</span>
+            <span class="text-right">{{ t('overview.deposits.returned') }}</span>
+            <span class="text-right">{{ t('overview.deposits.open') }}</span>
+          </div>
+          <ul>
+            <li
+              v-for="row in deposits.amounts"
+              :key="row.amount"
+              class="grid grid-cols-[minmax(0,1fr)_repeat(3,5rem)] gap-x-4 border-b border-base-200 py-1"
+            >
+              <span>{{ formatCurrency(row.amount) }}</span>
+              <span class="text-right">{{ row.issued }}</span>
+              <span class="text-right">{{ row.returned }}</span>
+              <span class="text-right font-semibold">{{ row.issued - row.returned }}</span>
+            </li>
+          </ul>
+
+          <dl class="mt-3 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
+            <dt>{{ t('overview.deposits.issuedValue') }}</dt>
+            <dd class="text-right">{{ formatCurrency(deposits.issuedValue) }}</dd>
+            <!-- Only worth splitting when vouchers covered part of it -->
+            <template v-if="deposits.coveredValue > 0">
+              <dt class="pl-4 text-sm text-base-500">{{ t('overview.deposits.covered') }}</dt>
+              <dd class="text-right text-sm text-base-500">{{ formatCurrency(deposits.coveredValue) }}</dd>
+              <dt class="pl-4 text-sm text-base-500">{{ t('overview.deposits.taken') }}</dt>
+              <dd class="text-right text-sm text-base-500">{{ formatCurrency(deposits.issuedValue - deposits.coveredValue) }}</dd>
+            </template>
+            <dt>{{ t('overview.deposits.paidBack') }}</dt>
+            <dd class="text-right">{{ formatCurrency(-deposits.returnedValue) }}</dd>
+            <dt class="font-semibold">{{ t('overview.deposits.netCash') }}</dt>
+            <dd class="text-right font-semibold">{{ formatCurrency(deposits.netCash) }}</dd>
+            <dt class="font-bold text-info-700">{{ t('overview.deposits.openValue') }}</dt>
+            <dd class="text-right font-bold text-info-700">{{ formatCurrency(deposits.openValue) }}</dd>
+          </dl>
+          <p v-if="deposits.returnRate !== null" class="mt-1 text-sm text-base-600">
+            {{ t('overview.deposits.returnRate', { rate: Math.round(deposits.returnRate * 100) }) }}
+          </p>
+          <p class="mt-1 text-xs text-base-500">
+            {{ t(standFilterActive ? 'overview.deposits.standHint' : 'overview.deposits.hint') }}
+          </p>
+        </div>
+
         <div v-if="showVouchers" class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
           <h2 class="text-lg font-semibold mb-4">{{ t('overview.vouchers.title') }}</h2>
 
@@ -389,6 +436,10 @@ const showFachschaft = computed(() =>
   fachschaftEnabled.value
   || Number(data.value?.payments?.count ?? 0) > 0
   || (data.value?.fachschaft?.items?.length ?? 0) > 0)
+
+const deposits = computed(() => data.value?.deposits ?? null)
+// Only events where containers with a deposit went out or came back get the card.
+const showDeposits = computed(() => Boolean(deposits.value?.amounts?.length))
 
 const vouchers = computed(() => data.value?.vouchers ?? null)
 // Only events that used vouchers (or have open ones for this event) get the card.

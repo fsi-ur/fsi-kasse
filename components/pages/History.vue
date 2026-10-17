@@ -102,7 +102,11 @@
         class="grid grid-cols-6 py-2 border-b border-base-200"
       >
         <span class="col-span-1">{{ item.quantity }}</span>
-        <span class="col-span-3">{{ item.name }}
+        <span v-if="item.line_kind === 'deposit_return'" class="col-span-3">
+          {{ t('deposit.returnLine') }}
+          <span class="text-xs text-base-500">{{ t('deposit.perContainer', { amount: formatCurrency(-item.deposit) }) }}</span>
+        </span>
+        <span v-else class="col-span-3">{{ item.name }}
           <span
             v-if="item.deposit > 0 && item.line_kind === 'item'"
             class="text-xs text-base-500"

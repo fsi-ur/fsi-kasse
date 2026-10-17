@@ -3,6 +3,7 @@ import { query, withTransaction } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
 import { loadOrderLines, orderMatchesSnapshot, parseChangeText } from '~/server/utils/orderChanges'
+import { isVoucherLineKind, type LineKind } from '~/server/utils/checkout'
 import {
   addVoucherDelta,
   applyVoucherDeltas,
@@ -27,7 +28,7 @@ interface RequestLineRow {
   quantity: number
   unit_price: string | number
   unit_deposit: string | number
-  line_kind: 'item' | 'voucher_redemption' | 'voucher_sale'
+  line_kind: LineKind
   voucher_id: number | null
   voucher_covers_deposit: number
 }
@@ -127,7 +128,7 @@ export default defineEventHandler(async (event) => {
         if (!matches) return { ok: false as const, error: 'The order has changed since the change request was made' }
 
         // A voucher deleted after the request was made leaves its line without a voucher.
-        if (proposed.some(line => line.line_kind !== 'item' && line.voucher_id == null)) {
+        if (proposed.some(line => isVoucherLineKind(line.line_kind) && line.voucher_id == null)) {
           return { ok: false as const, error: 'Gutschein nicht gefunden' }
         }
 

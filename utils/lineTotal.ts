@@ -1,8 +1,13 @@
 // Client twin of lineCashTotal in server/utils/checkout.ts: the cash a
 // customer pays for a line. A redeemed line is covered by the voucher — only
-// its deposit is paid, unless the voucher covers that too.
+// its deposit is paid, unless the voucher covers that too. A deposit return
+// has price 0 and a negative deposit, so it comes out as the cash paid back.
 
-export type LineKind = 'item' | 'voucher_redemption' | 'voucher_sale'
+export type LineKind = 'item' | 'voucher_redemption' | 'voucher_sale' | 'deposit_return'
+
+export function isVoucherLineKind(kind: LineKind | string | null | undefined) {
+  return kind === 'voucher_redemption' || kind === 'voucher_sale'
+}
 
 export function lineCashTotal(line: {
   kind?: LineKind | string | null

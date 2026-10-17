@@ -6,6 +6,7 @@ import { getCashRegisterEventById } from '~/server/utils/events'
 import { groupItemIds } from '~/server/utils/itemGroups'
 import { normalizeHexColor } from '~/utils/voucherColors'
 import { formatVoucherCode, normalizeVoucherCode } from '~/utils/voucherCode'
+import { voucherDepositMode, type VoucherDepositMode } from '~/utils/voucherDeposit'
 
 export type VoucherStatus = 'unsold' | 'active' | 'revoked'
 export type VoucherBatchKind = 'paid' | 'free'
@@ -57,6 +58,8 @@ export interface VoucherBatchRow {
   item_group_name: string
   units_per_voucher: number
   sale_price: number | null
+  deposit_mode: VoucherDepositMode
+  /** Legacy flag, kept for older clients: the customer pays no deposit in cash. */
   includes_deposit: boolean
   event_id: number | null
   event_name: string | null
@@ -83,7 +86,7 @@ export interface VoucherBatchSummary extends VoucherBatchRow {
 const BATCH_SELECT = `
   SELECT
     b.id, b.name, b.kind, b.item_group_id, g.name AS item_group_name, b.units_per_voucher,
-    b.sale_price, b.includes_deposit, b.event_id, e.name AS event_name, b.valid_until, b.note,
+    b.sale_price, b.deposit_mode, b.includes_deposit, b.event_id, e.name AS event_name, b.valid_until, b.note,
     b.pdf_layout, b.created_by, b.created_at
   FROM voucher_batches b
   JOIN item_groups g ON g.id = b.item_group_id
@@ -107,7 +110,8 @@ function mapBatchRow(row: any): VoucherBatchRow {
     item_group_name: String(row.item_group_name),
     units_per_voucher: Number(row.units_per_voucher),
     sale_price: row.sale_price == null ? null : Number(row.sale_price),
-    includes_deposit: Boolean(Number(row.includes_deposit)),
+    deposit_mode: voucherDepositMode(row),
+    includes_deposit: voucherDepositMode(row) !== 'customer',
     event_id: row.event_id == null ? null : Number(row.event_id),
     event_name: row.event_name == null ? null : String(row.event_name),
     valid_until: row.valid_until == null ? null : String(row.valid_until),
@@ -307,6 +311,8 @@ export interface VoucherWithBatch {
   item_group_id: number
   item_group_name: string
   sale_price: number | null
+  deposit_mode: VoucherDepositMode
+  /** Legacy flag, kept for older clients: the customer pays no deposit in cash. */
   includes_deposit: boolean
   event_id: number | null
   event_name: string | null
@@ -319,7 +325,7 @@ const VOUCHER_SELECT = `
     v.id, v.code, v.status, v.units_total, v.units_remaining, v.sold_order_id, v.sold_at,
     v.revoked_at, v.revoked_by, v.revoke_reason,
     b.id AS batch_id, b.name AS batch_name, b.kind, b.item_group_id, g.name AS item_group_name,
-    b.sale_price, b.includes_deposit, b.event_id, e.name AS event_name, b.valid_until, b.note
+    b.sale_price, b.deposit_mode, b.includes_deposit, b.event_id, e.name AS event_name, b.valid_until, b.note
   FROM vouchers v
   JOIN voucher_batches b ON b.id = v.batch_id
   JOIN item_groups g ON g.id = b.item_group_id
@@ -343,7 +349,8 @@ function mapVoucherRow(row: any): VoucherWithBatch {
     item_group_id: Number(row.item_group_id),
     item_group_name: String(row.item_group_name),
     sale_price: row.sale_price == null ? null : Number(row.sale_price),
-    includes_deposit: Boolean(Number(row.includes_deposit)),
+    deposit_mode: voucherDepositMode(row),
+    includes_deposit: voucherDepositMode(row) !== 'customer',
     event_id: row.event_id == null ? null : Number(row.event_id),
     event_name: row.event_name ?? null,
     valid_until: row.valid_until ?? null,
@@ -530,7 +537,14 @@ export async function resolveVoucherLines(input: {
       return { ok: false, error: withCode('Artikel ist auf diesem Gutschein nicht einlösbar', voucher.code) }
     }
     line.voucher_id = voucher.id
-    line.voucher_covers_deposit = voucher.includes_deposit
+    if (voucher.deposit_mode === 'none') {
+      // No container is issued against a deposit: the line carries none, so it
+      // is neither cash nor part of the deposit figures — and nothing is refunded.
+      line.unit_deposit = 0
+      line.voucher_covers_deposit = false
+    } else {
+      line.voucher_covers_deposit = voucher.deposit_mode === 'covered'
+    }
     line.line_total = lineCashTotal(line)
     addVoucherDelta(deltas, voucher.id, { unitsConsumed: line.quantity })
   }

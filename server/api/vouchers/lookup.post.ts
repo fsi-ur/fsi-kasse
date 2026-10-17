@@ -76,6 +76,7 @@ export default defineEventHandler(async (event) => {
         item_group_id: voucher.item_group_id,
         item_group_name: voucher.item_group_name,
         sale_price: voucher.sale_price,
+        deposit_mode: voucher.deposit_mode,
         includes_deposit: voucher.includes_deposit,
         event_id: voucher.event_id,
         event_name: voucher.event_name,

@@ -14,7 +14,7 @@
       <dt class="text-base-500">{{ t('vouchers.list.units') }}</dt>
       <dd class="text-right font-semibold">{{ t('vouchers.card.unitsLeft', { remaining: voucher.units_remaining, total: voucher.units_total }) }}</dd>
       <dt class="text-base-500">{{ t('common.deposit') }}</dt>
-      <dd class="text-right">{{ voucher.batch.includes_deposit ? t('vouchers.card.depositIncluded') : t('vouchers.card.depositExtra') }}</dd>
+      <dd class="text-right">{{ t(`vouchers.depositMode.${voucherDepositMode(voucher.batch)}`) }}</dd>
       <template v-if="voucher.batch.kind === 'paid'">
         <dt class="text-base-500">{{ t('common.price') }}</dt>
         <dd class="text-right">{{ formatCurrency(voucher.batch.sale_price) }}</dd>
@@ -51,6 +51,7 @@
 </template>
 
 <script setup lang="ts">
+import { voucherDepositMode } from '~/utils/voucherDeposit'
 import { useI18n } from '~/composables/useI18n'
 import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
 import { useVoucherLabels } from '~/composables/useVoucherLabels'

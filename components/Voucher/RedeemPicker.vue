@@ -12,7 +12,7 @@
       </span>
     </div>
     <p v-if="voucher" class="text-xs text-base-500">
-      {{ voucher.batch.includes_deposit ? t('vouchers.redeem.depositIncluded') : t('vouchers.redeem.depositExtra') }}
+      {{ t(`vouchers.depositMode.${voucherDepositMode(voucher.batch)}Hint`) }}
     </p>
 
     <p v-if="!rows.length" class="text-sm text-base-500">{{ t('vouchers.redeem.noItems') }}</p>
@@ -77,6 +77,7 @@
 </template>
 
 <script setup lang="ts">
+import { voucherDepositMode } from '~/utils/voucherDeposit'
 import { useI18n } from '~/composables/useI18n'
 import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
 

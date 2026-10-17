@@ -4,6 +4,11 @@ import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
 import { cashAmountSql } from '~/server/utils/checkout'
 import { loadVoucherOverview } from '~/server/utils/voucherOverview'
+import { loadDepositOverview } from '~/server/utils/deposits'
+
+// Units of an order line that count as handed-out items: a sold voucher and a
+// deposit return are not.
+const ITEM_QUANTITY_SQL = `IF(oi.line_kind IN ('voucher_sale', 'deposit_return'), 0, oi.quantity)`
 
 interface HourlyEntry {
   hour: string
@@ -122,7 +127,7 @@ export default defineEventHandler(async (event) => {
     SELECT
       DATE_FORMAT(o.created_at, '%Y-%m-%d %H:00:00') AS hour_start,
       SUM(${cashAmountSql()}) AS revenue,
-      SUM(IF(oi.line_kind = 'voucher_sale', 0, oi.quantity)) AS quantity
+      SUM(${ITEM_QUANTITY_SQL}) AS quantity
     FROM orders o
     JOIN order_items oi ON o.id = oi.order_id
     WHERE o.fachschaft = 0
@@ -157,7 +162,7 @@ export default defineEventHandler(async (event) => {
   const lastHourRows = normalizeBigInt(await query(`
     SELECT
       SUM(${cashAmountSql()}) AS revenue,
-      SUM(IF(oi.line_kind = 'voucher_sale', 0, oi.quantity)) AS quantity
+      SUM(${ITEM_QUANTITY_SQL}) AS quantity
     FROM orders o
     JOIN order_items oi ON o.id = oi.order_id
     WHERE o.fachschaft = 0
@@ -168,7 +173,7 @@ export default defineEventHandler(async (event) => {
   const prevHourRows = normalizeBigInt(await query(`
     SELECT
       SUM(${cashAmountSql()}) AS revenue,
-      SUM(IF(oi.line_kind = 'voucher_sale', 0, oi.quantity)) AS quantity
+      SUM(${ITEM_QUANTITY_SQL}) AS quantity
     FROM orders o
     JOIN order_items oi ON o.id = oi.order_id
     WHERE o.fachschaft = 0
@@ -194,7 +199,7 @@ export default defineEventHandler(async (event) => {
     SELECT
       o.stand_id AS id,
       COUNT(DISTINCT o.id) AS orders,
-      SUM(IF(oi.line_kind = 'voucher_sale', 0, oi.quantity)) AS quantity,
+      SUM(${ITEM_QUANTITY_SQL}) AS quantity,
       SUM(${cashAmountSql()}) AS revenue
     FROM orders o
     JOIN order_items oi ON oi.order_id = o.id
@@ -244,6 +249,7 @@ export default defineEventHandler(async (event) => {
   const stands = [...standsById.values()].sort((a, b) => b.revenue - a.revenue)
 
   const vouchers = await loadVoucherOverview(eventId, stand)
+  const deposits = await loadDepositOverview(eventId, stand)
 
   return {
     ok: true,
@@ -253,6 +259,7 @@ export default defineEventHandler(async (event) => {
       totalRevenue,
     },
     vouchers,
+    deposits,
     fachschaft: {
       items: fachschaftItems,
       totalWorth: fachschaftTotalWorth,

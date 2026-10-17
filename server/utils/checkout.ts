@@ -14,15 +14,20 @@ interface ItemRow {
   is_active: number
 }
 
-export type LineKind = 'item' | 'voucher_redemption' | 'voucher_sale'
+export type LineKind = 'item' | 'voucher_redemption' | 'voucher_sale' | 'deposit_return'
+
+export function isVoucherLineKind(kind: unknown) {
+  return kind === 'voucher_redemption' || kind === 'voucher_sale'
+}
 
 export interface BookedLine {
-  /** null for voucher sales (and for lines of deleted items). */
+  /** null for voucher sales and deposit returns (and for lines of deleted items). */
   item_id: number | null
   name: string
   quantity: number
   /** For redemptions the item's real price — its worth, not what the customer paid. */
   unit_price: number
+  /** Negative for a deposit return: the deposit paid back per unit. */
   unit_deposit: number
   line_kind: LineKind
   voucher_id: number | null
@@ -41,6 +46,7 @@ export function round2(value: number) {
 /**
  * The cash a customer pays for an order line. A redeemed line is covered by
  * the voucher — only its deposit is paid, unless the voucher covers that too.
+ * A deposit return (price 0, negative deposit) is the cash paid back.
  * Every total (checkout, history, change requests, overview) goes through this,
  * its SQL twin cashAmountSql, or the client twin in utils/lineTotal.ts.
  */

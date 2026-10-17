@@ -67,13 +67,21 @@
     </div>
     <p v-if="priceLocked" class="-mt-2 text-xs text-base-500">{{ t('vouchers.form.priceLocked') }}</p>
 
-    <label class="flex items-start gap-2 text-sm" :class="batch ? 'opacity-70' : 'cursor-pointer'">
-      <input v-model="form.includes_deposit" type="checkbox" class="checkbox mt-0.5" :disabled="!!batch" />
-      <span>
-        {{ t('vouchers.form.includesDeposit') }}
-        <span class="block text-xs text-base-500">{{ t('vouchers.form.includesDepositHint') }}</span>
-      </span>
-    </label>
+    <fieldset class="space-y-2" :class="{ 'opacity-70': batch }">
+      <legend class="section-title">{{ t('vouchers.depositMode.label') }}</legend>
+      <label
+        v-for="mode in VOUCHER_DEPOSIT_MODES"
+        :key="mode"
+        class="flex items-start gap-2 text-sm"
+        :class="batch ? '' : 'cursor-pointer'"
+      >
+        <input v-model="form.deposit_mode" type="radio" name="voucher-deposit-mode" :value="mode" class="mt-0.5" :disabled="!!batch" />
+        <span>
+          {{ t(`vouchers.depositMode.${mode}`) }}
+          <span class="block text-xs text-base-500">{{ t(`vouchers.depositMode.${mode}Hint`) }}</span>
+        </span>
+      </label>
+    </fieldset>
 
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div class="field">
@@ -126,6 +134,7 @@
 </template>
 
 <script setup lang="ts">
+import { VOUCHER_DEPOSIT_MODES, voucherDepositMode, type VoucherDepositMode } from '~/utils/voucherDeposit'
 import { useI18n } from '~/composables/useI18n'
 import { useToast } from '~/composables/useToast'
 import { useVoucherLabels } from '~/composables/useVoucherLabels'
@@ -157,7 +166,7 @@ interface BatchForm {
   kind: 'paid' | 'free'
   item_group_id: number | null
   units_per_voucher: number
-  includes_deposit: boolean
+  deposit_mode: VoucherDepositMode
   event_id: number | null
   valid_until: string | null
   note: string
@@ -174,7 +183,7 @@ const saving = ref(false)
 const submitted = ref(false)
 
 function emptyForm(): BatchForm {
-  return { name: '', kind: 'free', item_group_id: null, units_per_voucher: 1, includes_deposit: true, event_id: null, valid_until: null, note: '', count: 50 }
+  return { name: '', kind: 'free', item_group_id: null, units_per_voucher: 1, deposit_mode: 'covered', event_id: null, valid_until: null, note: '', count: 50 }
 }
 
 const priceLocked = computed(() => Boolean(props.batch?.in_use) && form.kind === 'paid')
@@ -191,7 +200,7 @@ watch(() => props.modelValue, (open) => {
         kind: batch.kind,
         item_group_id: batch.item_group_id,
         units_per_voucher: batch.units_per_voucher,
-        includes_deposit: batch.includes_deposit,
+        deposit_mode: voucherDepositMode(batch),
         event_id: batch.event_id,
         valid_until: batch.valid_until ? String(batch.valid_until).slice(0, 10) : null,
         note: batch.note ?? '',
@@ -286,7 +295,7 @@ async function submit() {
             kind: form.kind,
             item_group_id: form.item_group_id,
             units_per_voucher: form.units_per_voucher,
-            includes_deposit: form.includes_deposit,
+            deposit_mode: form.deposit_mode,
             count: form.count,
           },
         })

@@ -14,6 +14,7 @@ const steps = [
   { label: 'order change requests migration', command: 'node', args: ['scripts/migrate-order-change-requests.mjs'], required: true, attempts: 6 },
   { label: 'vouchers migration', command: 'node', args: ['scripts/migrate-vouchers.mjs'], required: true, attempts: 6 },
   { label: 'event affiliations migration', command: 'node', args: ['scripts/migrate-event-affiliations.mjs'], required: true, attempts: 6 },
+  { label: 'deposit returns migration', command: 'node', args: ['scripts/migrate-deposit-returns.mjs'], required: true, attempts: 6 },
   { label: 'admin seed', command: 'node', args: ['scripts/seed-admin.mjs'], required: true, attempts: 6 },
   { label: 'connection database user', command: 'node', args: ['scripts/create-connection-db-user.mjs'], required: false },
 ]

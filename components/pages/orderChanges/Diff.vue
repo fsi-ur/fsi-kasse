@@ -21,10 +21,16 @@
           <span v-else>{{ row.after }}</span>
         </span>
         <span class="col-span-3" :class="{ 'line-through text-base-500': row.kind === 'removed' }">
-          {{ row.name }}
-          <span class="text-xs text-base-500">
-            {{ formatCurrency(row.price) }}<template v-if="row.deposit > 0"> {{ t('checkout.depositSuffix', { amount: formatCurrency(row.deposit) }) }}</template>
-          </span>
+          <template v-if="row.lineKind === 'deposit_return'">
+            {{ t('deposit.returnLine') }}
+            <span class="text-xs text-base-500">{{ t('deposit.perContainer', { amount: formatCurrency(-row.deposit) }) }}</span>
+          </template>
+          <template v-else>
+            {{ row.name }}
+            <span class="text-xs text-base-500">
+              {{ formatCurrency(row.price) }}<template v-if="row.deposit > 0"> {{ t('checkout.depositSuffix', { amount: formatCurrency(row.deposit) }) }}</template>
+            </span>
+          </template>
           <span v-if="row.voucherCode" class="mt-0.5 flex items-center gap-1">
             <span class="rounded-full bg-success-300 px-2 py-0.5 text-[10px] font-medium text-success-900">
               {{ row.lineKind === 'voucher_sale' ? t('vouchers.cart.sold') : t('vouchers.cart.badge') }}

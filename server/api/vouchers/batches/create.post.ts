@@ -3,6 +3,7 @@ import { query, withTransaction } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
 import { insertVouchers, MAX_VOUCHERS_PER_BATCH } from '~/server/utils/voucherCodes'
 import { MAX_UNITS_PER_VOUCHER, parseEditableBatchFields, parseSalePrice } from '~/server/utils/vouchers'
+import { isVoucherDepositMode, voucherDepositMode } from '~/utils/voucherDeposit'
 
 // Creates a batch together with its vouchers. Free vouchers are usable right
 // away; paid ones are worthless (`unsold`) until sold in a checkout.
@@ -43,14 +44,18 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: `Die Anzahl muss zwischen 1 und ${MAX_VOUCHERS_PER_BATCH} liegen` }
   }
 
-  const includesDeposit = body?.includes_deposit ? 1 : 0
+  if (body?.deposit_mode != null && !isVoucherDepositMode(body.deposit_mode)) {
+    return { ok: false, error: 'Ungültige Pfandregel' }
+  }
+  const depositMode = voucherDepositMode(body ?? {})
 
   const id = await withTransaction(async (conn) => {
     const result: any = await query(
       `INSERT INTO voucher_batches
-         (name, kind, item_group_id, units_per_voucher, sale_price, includes_deposit, event_id, valid_until, note, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [fields.name, kind, itemGroupId, units, salePrice, includesDeposit, fields.event_id, fields.valid_until, fields.note, current.user.username],
+         (name, kind, item_group_id, units_per_voucher, sale_price, deposit_mode, includes_deposit, event_id, valid_until, note, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [fields.name, kind, itemGroupId, units, salePrice, depositMode, depositMode === 'customer' ? 0 : 1,
+        fields.event_id, fields.valid_until, fields.note, current.user.username],
       conn,
     )
     const batchId = Number(result.insertId)

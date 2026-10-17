@@ -7,7 +7,8 @@ import { batchInUse, parseEditableBatchFields, parseSalePrice } from '~/server/u
 // units and deposit coverage are fixed, and a paid batch's price is fixed once
 // one of its vouchers was sold. That keeps the only accepted sale price the
 // batch's current one.
-const IMMUTABLE_FIELDS = ['kind', 'item_group_id', 'units_per_voucher', 'includes_deposit'] as const
+const IMMUTABLE_FIELDS = ['kind', 'item_group_id', 'units_per_voucher', 'deposit_mode'] as const
+const TEXT_FIELDS = new Set<string>(['kind', 'deposit_mode'])
 
 export default defineEventHandler(async (event) => {
   const current = await requirePermission(event, 'cash_register.manage')
@@ -23,7 +24,7 @@ export default defineEventHandler(async (event) => {
 
   return withTransaction(async (conn) => {
     const rows = await query<any[]>(
-      `SELECT kind, item_group_id, units_per_voucher, includes_deposit, sale_price
+      `SELECT kind, item_group_id, units_per_voucher, deposit_mode, sale_price
        FROM voucher_batches WHERE id = ? FOR UPDATE`,
       [id],
       conn,
@@ -33,8 +34,8 @@ export default defineEventHandler(async (event) => {
 
     for (const field of IMMUTABLE_FIELDS) {
       if (body?.[field] === undefined) continue
-      const stored = field === 'kind' ? String(batch[field]) : Number(batch[field])
-      const requested = field === 'kind' ? String(body[field]) : Number(field === 'includes_deposit' ? Boolean(body[field]) : body[field])
+      const stored = TEXT_FIELDS.has(field) ? String(batch[field]) : Number(batch[field])
+      const requested = TEXT_FIELDS.has(field) ? String(body[field]) : Number(body[field])
       if (stored !== requested) {
         return { ok: false as const, error: 'Art, Artikelgruppe, Einheiten und Pfand können nach dem Anlegen nicht mehr geändert werden' }
       }

@@ -3,7 +3,8 @@ import { query, withTransaction } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
 import { canAccessEvent } from '~/server/utils/affiliations'
 import { normalizeBigInt } from '~/server/utils/normalize'
-import { normalizeLines, resolveBookedLines } from '~/server/utils/checkout'
+import { isVoucherLineKind, normalizeLines, resolveBookedLines } from '~/server/utils/checkout'
+import { normalizeDepositReturns, resolveDepositReturns } from '~/server/utils/deposits'
 import { getCashRegisterCashierById } from '~/server/utils/cashiers'
 import { getCashRegisterEventById } from '~/server/utils/events'
 import { getCashRegisterSettings } from '~/server/utils/appSettings'
@@ -71,8 +72,16 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'Missing or invalid voucher sales' }
   }
 
+  const addedReturns = normalizeDepositReturns(body?.added_deposit_returns)
+  if (!addedReturns) {
+    return { ok: false, error: 'Missing or invalid deposit returns' }
+  }
+
   const resolved = await resolveBookedLines(addedLines)
   if (!resolved.ok) return resolved
+
+  const returns = await resolveDepositReturns(addedReturns)
+  if (!returns.ok) return returns
 
   let cashierId: number | null = null
   if (body?.cashier_id != null && body.cashier_id !== '') {
@@ -82,12 +91,15 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const hasProposedLines = kept.size > 0 || resolved.booked.length > 0 || addedSales.length > 0
+  const hasProposedLines = kept.size > 0 || resolved.booked.length > 0 || addedSales.length > 0 || returns.booked.length > 0
   const proposedFachschaft = Boolean(body?.is_fachschaft) && hasProposedLines
+  if (proposedFachschaft && returns.booked.length > 0) {
+    return { ok: false, error: 'Pfandrückgaben sind in Fachschaftsbestellungen nicht erlaubt' }
+  }
 
   const vouchers = await resolveVoucherLines({ lines: resolved.booked, sales: addedSales, isFachschaft: proposedFachschaft })
   if (!vouchers.ok) return vouchers
-  const added = [...resolved.booked, ...vouchers.sales]
+  const added = [...resolved.booked, ...vouchers.sales, ...returns.booked]
 
   const orderRows = normalizeBigInt(await query<Array<{ event_id: number, created_at: string }>>(
     `SELECT event_id, created_at FROM orders WHERE id = ? LIMIT 1`,
@@ -149,8 +161,14 @@ export default defineEventHandler(async (event) => {
       if (line.line_kind === 'voucher_sale' && quantity !== 1) return { ok: false as const, error: 'Missing or invalid order items' }
     }
 
-    if (proposedFachschaft && originals.some(line => kept.has(Number(line.id)) && line.line_kind !== 'item')) {
-      return { ok: false as const, error: 'Gutscheine sind in Fachschaftsbestellungen nicht erlaubt' }
+    if (proposedFachschaft) {
+      const keptLines = originals.filter(line => kept.has(Number(line.id)))
+      if (keptLines.some(line => isVoucherLineKind(line.line_kind))) {
+        return { ok: false as const, error: 'Gutscheine sind in Fachschaftsbestellungen nicht erlaubt' }
+      }
+      if (keptLines.some(line => line.line_kind === 'deposit_return')) {
+        return { ok: false as const, error: 'Pfandrückgaben sind in Fachschaftsbestellungen nicht erlaubt' }
+      }
     }
 
     const unchanged = added.length === 0

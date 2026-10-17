@@ -27,6 +27,24 @@
             {{ showAllItems ? t('checkout.showStandItems', { stand: effectiveStand.name }) : t('checkout.showAllItems') }}
           </button>
         </div>
+        <!-- One tap per container taken back, like adding an item -->
+        <div v-if="depositOptions.length" class="mb-4 flex flex-wrap gap-2">
+          <button
+            v-for="option in depositOptions"
+            :key="option.key"
+            type="button"
+            class="flex min-h-12 min-w-0 items-center gap-2 rounded-lg border border-info-300 bg-info-50 px-4 py-2 text-left text-info-900 transition-colors not-disabled:cursor-pointer not-disabled:hover:bg-info-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="isFachschaft"
+            :title="isFachschaft ? t('deposit.fachschaftBlocked') : option.itemNames"
+            @click="addDepositReturn(option.amount)"
+          >
+            <Icon name="material-symbols:undo-rounded" class="h-5 w-5 shrink-0" aria-hidden="true" />
+            <span class="min-w-0">
+              <span class="block font-semibold">{{ t('deposit.returnButton', { amount: formatCurrency(option.amount) }) }}</span>
+              <span v-if="depositOptions.length > 1" class="block max-w-48 truncate text-xs text-info-700">{{ option.itemNames }}</span>
+            </span>
+          </button>
+        </div>
         <div v-if="effectiveStand && visibleItems.length === 0 && items.length > 0" class="text-base-400">
           {{ t('checkout.standHasNoItems') }}
         </div>
@@ -84,6 +102,10 @@
                   {{ t('vouchers.cart.redeemNow') }}
                 </button>
               </template>
+              <template v-else-if="line.kind === 'deposit_return'">
+                {{ t('deposit.returnLine') }}
+                <span class="block text-xs text-base-500">{{ t('deposit.perContainer', { amount: formatCurrency(-line.deposit) }) }}</span>
+              </template>
               <template v-else>
                 {{ line.name }}
                 <span v-if="line.kind === 'item' && line.deposit > 0" class="text-xs text-base-500">
@@ -124,11 +146,12 @@
         </ul>
 
         <div class="flex flex-rows flex-wrap justify-between">
-          <div class="mt-4 font-bold text-lg">
-            {{ t('common.total') }}: {{ formatCurrency(total) }}
+          <div class="mt-4 font-bold text-lg" :class="{ 'text-info-700': total < 0 }">
+            <template v-if="total < 0">{{ t('deposit.payout') }}: {{ formatCurrency(-total) }}</template>
+            <template v-else>{{ t('common.total') }}: {{ formatCurrency(total) }}</template>
           </div>
           <button
-            v-if="fachschaftEnabled && !hasVoucherLines"
+            v-if="fachschaftEnabled && !hasVoucherLines && !hasDepositReturns"
             @click="isFachschaft = !isFachschaft"
             class="mt-4 px-4 py-2 rounded-md text-sm cursor-pointer transition-colors"
             :class="isFachschaft
@@ -163,7 +186,7 @@
                 {{ t('checkout.donationDirect') }}
               </button>
               <button
-                v-if="orderItems.length > 0 && !isFachschaft"
+                v-if="orderItems.length > 0 && !isFachschaft && total >= 0"
                 class="px-3 py-1 cursor-pointer transition-colors border-l border-base-200"
                 :class="donationMode === 'paid'
                   ? 'bg-accent-500 text-white'
@@ -174,6 +197,16 @@
               </button>
             </div>
           </div>
+
+          <button
+            v-if="total < 0 && donationMode === null"
+            type="button"
+            class="mb-1 flex w-full items-center justify-center gap-2 rounded-md border border-accent-300 px-3 py-2 text-sm text-accent-700 cursor-pointer transition-colors hover:bg-accent-50"
+            @click="donateDeposit"
+          >
+            <Icon name="material-symbols:volunteer-activism-outline-rounded" class="h-4 w-4" aria-hidden="true" />
+            {{ t('deposit.donate', { amount: formatCurrency(-total) }) }}
+          </button>
 
           <div v-if="donationMode === 'direct'" class="flex items-center gap-2">
             <input
@@ -234,9 +267,15 @@
   >
     <template #message>
       {{ t('checkout.confirmQuestion') }}<br />
-      <span v-if="orderItems.length > 0" class="font-bold">{{ t('common.total') }}: {{ formatCurrency(total) }}</span>
+      <span v-if="orderItems.length > 0 && total < 0" class="font-bold text-info-700">{{ t('deposit.payout') }}: {{ formatCurrency(-total) }}</span>
+      <span v-else-if="orderItems.length > 0" class="font-bold">{{ t('common.total') }}: {{ formatCurrency(total) }}</span>
       <span v-if="effectiveDonation > 0" class="block text-accent-600 font-bold">
         {{ t('checkout.donationLabel') }}: {{ formatCurrency(effectiveDonation) }}
+      </span>
+      <span v-if="total < 0 && donationMode === 'direct' && effectiveDonation > 0" class="block font-bold">
+        {{ total + effectiveDonation < 0
+          ? t('deposit.netPayout', { amount: formatCurrency(-(total + effectiveDonation)) })
+          : t('deposit.netDue', { amount: formatCurrency(total + effectiveDonation) }) }}
       </span>
     </template>
   </FormConfirmation>
@@ -270,10 +309,11 @@ import { useConnectivity } from '~/composables/useConnectivity'
 import { sanitizeCurrencyInput, parseCurrencyInput, focusAndSelectInput } from '~/composables/useCurrencyInput'
 import { cachedFetch } from '~/composables/useCachedFetch'
 import { onOfflineDataChanged, useOfflineQueue, type CheckoutPayload } from '~/composables/useOfflineQueue'
-import { cartLineKey, type CartLine } from '~/composables/useCheckout'
+import { cartLineKey, depositReturnKey, type CartLine } from '~/composables/useCheckout'
 import { createClientUuid } from '~/utils/network'
-import { lineCashTotal, lineWorth } from '~/utils/lineTotal'
+import { isVoucherLineKind, lineCashTotal, lineWorth } from '~/utils/lineTotal'
 import { formatVoucherCode } from '~/utils/voucherCode'
+import { voucherSparesDepositCash } from '~/utils/voucherDeposit'
 
 const items = ref<any[]>([])
 const itemsUnavailable = ref(false)
@@ -376,7 +416,8 @@ function setDonationMode(mode: 'direct' | 'paid' | null) {
   paidFocused.value = false
 }
 
-const hasVoucherLines = computed(() => orderItems.value.some(line => line.kind !== 'item'))
+const hasVoucherLines = computed(() => orderItems.value.some(line => isVoucherLineKind(line.kind)))
+const hasDepositReturns = computed(() => orderItems.value.some(line => line.kind === 'deposit_return'))
 
 watch(fachschaftEnabled, (enabled) => {
   if (!enabled) isFachschaft.value = false
@@ -387,8 +428,9 @@ watch(hasVoucherLines, (has) => {
   if (has) isFachschaft.value = false
 }, { immediate: true })
 
-watch([() => orderItems.value.length, isFachschaft], ([count, fachschaft]) => {
-  if (donationMode.value === 'paid' && (count === 0 || fachschaft)) setDonationMode(null)
+// Deposit returns are never part of a Fachschaft order either.
+watch(hasDepositReturns, (has) => {
+  if (has) isFachschaft.value = false
 }, { immediate: true })
 
 // "Alle Artikel anzeigen" only widens the grid; the order still counts for the
@@ -430,7 +472,8 @@ function reconcileCart() {
   let priceChanged = false
 
   orderItems.value = orderItems.value.filter((line) => {
-    if (line.kind === 'voucher_sale') return true
+    // The server accepts any deposit an item ever had, so returns stay as charged.
+    if (line.kind === 'voucher_sale' || line.kind === 'deposit_return') return true
     const item = available.get(line.id)
     if (!item) {
       removed.push(String(line.name))
@@ -473,10 +516,70 @@ function addToOrder(item: any) {
   })
 }
 
+/**
+ * One return button per deposit amount of the active items — of every item, not
+ * only the stand's.
+ */
+const depositOptions = computed(() => {
+  const byCents = new Map<number, { names: string[], standNames: string[] }>()
+  const standItemIds = effectiveStand.value ? new Set(effectiveStand.value.item_ids) : null
+  for (const item of items.value) {
+    const cents = Math.round(Number(item.deposit ?? 0) * 100)
+    if (cents <= 0) continue
+    let entry = byCents.get(cents)
+    if (!entry) {
+      entry = { names: [], standNames: [] }
+      byCents.set(cents, entry)
+    }
+    entry.names.push(String(item.name))
+    if (standItemIds?.has(Number(item.id))) entry.standNames.push(String(item.name))
+  }
+
+  return [...byCents.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([cents, entry]) => {
+      const amount = cents / 100
+      const names = entry.standNames.length ? entry.standNames : entry.names
+      return {
+        key: depositReturnKey(amount),
+        amount,
+        itemNames: names.slice(0, 3).join(', ') + (names.length > 3 ? ', …' : ''),
+      }
+    })
+})
+
+function addDepositReturn(amount: number) {
+  if (isFachschaft.value) return
+  const key = depositReturnKey(amount)
+  const existing = orderItems.value.find(line => line.key === key)
+  if (existing) existing.quantity += 1
+  else orderItems.value.push({
+    key,
+    kind: 'deposit_return',
+    id: null,
+    name: t('deposit.returnLine'),
+    price: 0,
+    deposit: -amount,
+    quantity: 1,
+  })
+}
+
+/** The customer leaves the deposit paid back as a donation: one tap, nothing to type. */
+function donateDeposit() {
+  if (total.value >= 0) return
+  setDonationMode('direct')
+  directAmount.value = -total.value
+}
+
 const total = computed(() => {
   if (isFachschaft.value) return 0
   return Math.round(orderItems.value.reduce((sum, line) => sum + lineCashTotal(line), 0) * 100) / 100
 })
+
+// "Betrag erhalten" makes no sense when the till pays out.
+watch([() => orderItems.value.length, isFachschaft, () => total.value < 0], ([count, fachschaft, payout]) => {
+  if (donationMode.value === 'paid' && (count === 0 || fachschaft || payout)) setDonationMode(null)
+}, { immediate: true })
 
 function removeLine(line: CartLine) {
   // Redemptions of a voucher that is only sold in this very cart go with the sale.
@@ -612,7 +715,7 @@ function applyRedemption(picked: Record<number, number>) {
       deposit: Number(item.deposit ?? 0),
       quantity: count,
       voucherCode: code,
-      coversDeposit: Boolean(voucher.batch.includes_deposit),
+      coversDeposit: voucherSparesDepositCash(voucher.batch),
     })
   }
 
@@ -681,7 +784,7 @@ async function revalidateVoucherLines(): Promise<boolean> {
       const quantity = Math.min(line.quantity, left)
       left -= quantity
       if (quantity !== line.quantity) shrunk = true
-      const coversDeposit = Boolean(res.voucher.batch.includes_deposit)
+      const coversDeposit = voucherSparesDepositCash(res.voucher.batch)
       return quantity > 0 ? [{ ...line, quantity, coversDeposit }] : []
     })
     if (shrunk) messages.push(t('vouchers.cart.reduced', { code: formatted }))
@@ -695,6 +798,7 @@ async function revalidateVoucherLines(): Promise<boolean> {
 }
 
 function describeLine(line: CartLine) {
+  if (line.kind === 'deposit_return') return `${line.quantity}× ${t('deposit.returnLine')} (${formatCurrency(-line.deposit)})`
   if (line.kind === 'voucher_sale') return `${line.name} (${formatVoucherCode(line.voucherCode!)})`
   if (line.kind === 'voucher_redemption') return `${line.quantity}× ${line.name} (${t('vouchers.cart.badge')} ${formatVoucherCode(line.voucherCode!)})`
   return `${line.quantity}× ${line.name}`
@@ -739,7 +843,7 @@ async function bookOrder() {
     is_fachschaft: isFachschaft.value,
     stand_id: effectiveStand.value?.id ?? null,
     items: orderItems.value
-      .filter(line => line.kind !== 'voucher_sale')
+      .filter(line => line.kind === 'item' || line.kind === 'voucher_redemption')
       .map(line => ({
         id: Number(line.id),
         quantity: line.quantity,
@@ -750,6 +854,9 @@ async function bookOrder() {
     voucher_sales: orderItems.value
       .filter(line => line.kind === 'voucher_sale')
       .map(line => ({ code: line.voucherCode!, unit_price: Number(line.price) })),
+    deposit_returns: orderItems.value
+      .filter(line => line.kind === 'deposit_return')
+      .map(line => ({ amount: -Number(line.deposit), quantity: line.quantity })),
     donation,
   }
 

@@ -7,11 +7,12 @@ export type DonationMode = 'direct' | 'paid' | null
 export interface CartLine {
   key: string
   kind: LineKind
-  /** Item id; null for a voucher sale. */
+  /** Item id; null for a voucher sale or a deposit return. */
   id: number | null
   name: string
   /** For a redemption the item's price — its worth, not what the customer pays. */
   price: number
+  /** Negative for a deposit return: the amount paid back per container. */
   deposit: number
   quantity: number
   /** Redemption: the voucher paying for the item. Sale: the voucher sold. */
@@ -27,9 +28,21 @@ export function cartLineKey(kind: LineKind, itemId: number | null, voucherCode?:
   return `${kind}:${itemId ?? ''}:${voucherCode ?? ''}`
 }
 
+/** One cart line per deposit amount paid back. */
+export function depositReturnKey(amount: number) {
+  return `deposit_return::${Math.round(Math.abs(amount) * 100)}`
+}
+
+const CART_LINE_KINDS: LineKind[] = ['item', 'voucher_redemption', 'voucher_sale', 'deposit_return']
+
 function normalizeCartLine(stored: any): CartLine | null {
   if (!stored || typeof stored !== 'object') return null
-  const kind: LineKind = stored.kind === 'voucher_redemption' || stored.kind === 'voucher_sale' ? stored.kind : 'item'
+  const kind: LineKind = CART_LINE_KINDS.includes(stored.kind) ? stored.kind : 'item'
+  if (kind === 'deposit_return') {
+    const deposit = -Math.abs(Number(stored.deposit))
+    if (!(deposit < 0) || !(Number(stored.quantity) > 0)) return null
+    return { ...stored, kind, id: null, key: depositReturnKey(deposit), price: 0, deposit, quantity: Number(stored.quantity) }
+  }
   const id = stored.id == null ? null : Number(stored.id)
   if (kind !== 'voucher_sale' && !(Number(id) > 0)) return null
   if (kind !== 'item' && typeof stored.voucherCode !== 'string') return null

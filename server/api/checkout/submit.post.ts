@@ -13,6 +13,7 @@ import {
   validateCashierAndEvent,
 } from '~/server/utils/checkout'
 import { resolveStandId } from '~/server/utils/stands'
+import { normalizeDepositReturns, resolveDepositReturns } from '~/server/utils/deposits'
 import { getCashRegisterEventById } from '~/server/utils/events'
 import { getCashRegisterSettings } from '~/server/utils/appSettings'
 import {
@@ -80,12 +81,17 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'Missing or invalid voucher sales' }
   }
 
+  const depositReturns = normalizeDepositReturns(body?.deposit_returns)
+  if (!depositReturns) {
+    return { ok: false, error: 'Missing or invalid deposit returns' }
+  }
+
   const donation = parseDonation(body?.donation)
   if (donation === undefined) {
     return { ok: false, error: 'Missing or invalid donation details' }
   }
 
-  if (lines.length === 0 && voucherSales.length === 0 && !donation) {
+  if (lines.length === 0 && voucherSales.length === 0 && depositReturns.length === 0 && !donation) {
     return { ok: false, error: 'Missing or invalid order items' }
   }
 
@@ -97,12 +103,19 @@ export default defineEventHandler(async (event) => {
   const resolved = await resolveBookedLines(lines)
   if (!resolved.ok) return resolved
 
-  const hasLines = resolved.booked.length > 0 || voucherSales.length > 0
+  const returns = await resolveDepositReturns(depositReturns)
+  if (!returns.ok) return returns
+
+  const hasLines = resolved.booked.length > 0 || voucherSales.length > 0 || returns.booked.length > 0
   const isFachschaft = Boolean(body?.is_fachschaft) && hasLines
+  // A Fachschaft order is free, so a deposit paid back in it would vanish from the total.
+  if (isFachschaft && returns.booked.length > 0) {
+    return { ok: false, error: 'Pfandrückgaben sind in Fachschaftsbestellungen nicht erlaubt' }
+  }
 
   const vouchers = await resolveVoucherLines({ lines: resolved.booked, sales: voucherSales, isFachschaft })
   if (!vouchers.ok) return vouchers
-  const booked = [...resolved.booked, ...vouchers.sales]
+  const booked = [...resolved.booked, ...vouchers.sales, ...returns.booked]
 
   if (isFachschaft) {
     const fachschaftEvent = await getCashRegisterEventById(eventId)

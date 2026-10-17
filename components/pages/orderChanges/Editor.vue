@@ -39,7 +39,11 @@
           </button>
         </span>
         <span class="col-span-3">
-          <span :class="{ 'line-through text-base-500': line.quantity === 0 }">{{ line.name }}</span>
+          <span v-if="line.kind === 'deposit_return'" :class="{ 'line-through text-base-500': line.quantity === 0 }">
+            {{ t('deposit.returnLine') }}
+            <span class="text-xs text-base-500">{{ t('deposit.perContainer', { amount: formatCurrency(-line.deposit) }) }}</span>
+          </span>
+          <span v-else :class="{ 'line-through text-base-500': line.quantity === 0 }">{{ line.name }}</span>
           <span v-if="line.kind === 'item' && line.deposit > 0" class="ml-1 text-xs text-base-500">
             {{ t('checkout.depositSuffix', { amount: formatCurrency(line.deposit) }) }}
           </span>
@@ -90,7 +94,7 @@
         {{ formatCurrency(newTotal) }}
       </span>
       <button
-        v-if="(order?.is_fachschaft || fachschaftEnabled) && !hasVoucherLines"
+        v-if="(order?.is_fachschaft || fachschaftEnabled) && !hasVoucherLines && !hasDepositReturns"
         type="button"
         class="px-4 py-2 rounded-md text-sm cursor-pointer transition-colors"
         :class="isFachschaft
@@ -159,8 +163,9 @@ import { useToast } from '~/composables/useToast'
 import { useConnectivity } from '~/composables/useConnectivity'
 import { cachedFetch } from '~/composables/useCachedFetch'
 import type { SearchSelectOption } from '~/components/Common/SearchSelect.vue'
-import { lineCashTotal, type LineKind } from '~/utils/lineTotal'
+import { isVoucherLineKind, lineCashTotal, type LineKind } from '~/utils/lineTotal'
 import { formatVoucherCode } from '~/utils/voucherCode'
+import { voucherSparesDepositCash } from '~/utils/voucherDeposit'
 
 // Mirrors MAX_CHANGE_TEXT_LENGTH on the server.
 const MAX_REASON_LENGTH = 1000
@@ -242,18 +247,35 @@ watch(() => props.modelValue, (open) => {
   loadItems()
 }, { immediate: true })
 
-const itemOptions = computed<SearchSelectOption[]>(() => items.value.map(item => ({
-  key: item.id,
-  label: `${item.name} (${formatCurrency(item.price)})`,
-  value: item.id,
-})))
+const DEPOSIT_OPTION_PREFIX = 'deposit:'
+
+/** Deposit amounts of the active items: what a forgotten return can be added at. */
+const depositAmounts = computed(() => [...new Set(items.value
+  .map(item => Math.round(Number(item.deposit ?? 0) * 100))
+  .filter(cents => cents > 0))]
+  .sort((a, b) => a - b)
+  .map(cents => cents / 100))
+
+const itemOptions = computed<SearchSelectOption[]>(() => [
+  ...items.value.map(item => ({
+    key: item.id,
+    label: `${item.name} (${formatCurrency(item.price)})`,
+    value: item.id,
+  })),
+  ...depositAmounts.value.map(amount => ({
+    key: `${DEPOSIT_OPTION_PREFIX}${amount}`,
+    label: t('deposit.returnOption', { amount: formatCurrency(amount) }),
+    value: `${DEPOSIT_OPTION_PREFIX}${amount}`,
+  })),
+])
 
 function lineTotal(line: EditorLine, quantity: number) {
   return lineCashTotal({ kind: line.kind, quantity, price: line.price, deposit: line.deposit, coversDeposit: line.coversDeposit })
 }
 
 const hasLines = computed(() => lines.value.some(line => line.quantity > 0))
-const hasVoucherLines = computed(() => lines.value.some(line => line.kind !== 'item' && line.quantity > 0))
+const hasVoucherLines = computed(() => lines.value.some(line => isVoucherLineKind(line.kind) && line.quantity > 0))
+const hasDepositReturns = computed(() => lines.value.some(line => line.kind === 'deposit_return' && line.quantity > 0))
 const originalTotal = computed(() => props.order?.is_fachschaft
   ? 0
   : lines.value.reduce((sum, line) => sum + lineTotal(line, line.originalQuantity), 0))
@@ -264,9 +286,9 @@ const newTotal = computed(() => isFachschaft.value && hasLines.value
 const hasChanges = computed(() => lines.value.some(line => line.quantity !== line.originalQuantity)
   || (hasLines.value && isFachschaft.value !== Boolean(props.order?.is_fachschaft)))
 
-// Vouchers are never part of a Fachschaft order.
-watch(hasVoucherLines, (has) => {
-  if (has) isFachschaft.value = false
+// Vouchers and deposit returns are never part of a Fachschaft order.
+watch([hasVoucherLines, hasDepositReturns], ([vouchers, returns]) => {
+  if (vouchers || returns) isFachschaft.value = false
 })
 
 function canIncrease(line: EditorLine) {
@@ -284,8 +306,35 @@ function changeQuantity(line: EditorLine, delta: number) {
   }
 }
 
+function addDepositReturn(amount: number) {
+  const deposit = -amount
+  const existing = lines.value.find(line => line.kind === 'deposit_return' && line.order_item_id == null && line.deposit === deposit)
+  if (existing) {
+    existing.quantity += 1
+    return
+  }
+
+  lines.value.push({
+    key: `added-deposit-${amount}`,
+    order_item_id: null,
+    item_id: null,
+    name: t('deposit.returnLine'),
+    price: 0,
+    deposit,
+    quantity: 1,
+    originalQuantity: 0,
+    kind: 'deposit_return',
+    voucherCode: null,
+    coversDeposit: false,
+  })
+}
+
 function addItem(value: unknown) {
   itemQuery.value = ''
+  if (typeof value === 'string' && value.startsWith(DEPOSIT_OPTION_PREFIX)) {
+    addDepositReturn(Number(value.slice(DEPOSIT_OPTION_PREFIX.length)))
+    return
+  }
   const item = items.value.find(entry => entry.id === Number(value))
   if (!item) return
 
@@ -402,7 +451,7 @@ function applyRedemption(picked: Record<number, number>) {
       originalQuantity: 0,
       kind: 'voucher_redemption',
       voucherCode: code,
-      coversDeposit: Boolean(voucher.batch.includes_deposit),
+      coversDeposit: voucherSparesDepositCash(voucher.batch),
     })
   }
   lines.value = kept
@@ -426,7 +475,7 @@ async function submit() {
           .filter(line => line.order_item_id != null && line.quantity > 0)
           .map(line => ({ order_item_id: line.order_item_id, quantity: line.quantity })),
         added: addedLines
-          .filter(line => line.kind !== 'voucher_sale')
+          .filter(line => line.kind === 'item' || line.kind === 'voucher_redemption')
           .map(line => ({
             id: line.item_id,
             quantity: line.quantity,
@@ -437,6 +486,9 @@ async function submit() {
         added_voucher_sales: addedLines
           .filter(line => line.kind === 'voucher_sale')
           .map(line => ({ code: line.voucherCode, unit_price: line.price })),
+        added_deposit_returns: addedLines
+          .filter(line => line.kind === 'deposit_return')
+          .map(line => ({ amount: -line.deposit, quantity: line.quantity })),
       },
     })
 

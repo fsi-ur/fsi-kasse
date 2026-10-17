@@ -19,6 +19,8 @@ export interface CheckoutPayload {
   items: Array<{ id: number, quantity: number, unit_price: number, unit_deposit: number, voucher_code?: string }>
   /** Vouchers sold with this order, at the batch price the cashier charged. */
   voucher_sales?: Array<{ code: string, unit_price: number }>
+  /** Containers taken back, per deposit amount paid back (positive). */
+  deposit_returns?: Array<{ amount: number, quantity: number }>
   donation:
     | null
     | { mode: 'direct', amount: number }

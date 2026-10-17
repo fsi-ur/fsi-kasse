@@ -6,7 +6,7 @@ import { hexToRgb } from '~/utils/voucherColors'
 import { DEFAULT_QR_QUIET_ZONE, MAX_QR_QUIET_ZONE } from '~/utils/voucherPdfLayout'
 import type { VoucherBatchRow } from '~/server/utils/vouchers'
 
-const CSV_HEADER = ['code', 'code_formatted', 'batch', 'kind', 'item_group', 'units', 'includes_deposit', 'price', 'event', 'valid_until', 'qr_svg', 'qr_png']
+const CSV_HEADER = ['code', 'code_formatted', 'batch', 'kind', 'item_group', 'units', 'includes_deposit', 'price', 'event', 'valid_until', 'qr_svg', 'qr_png', 'deposit_mode']
 
 /** QR settings shared by every export: error correction M, 4-module quiet zone unless chosen otherwise. */
 export const QR_OPTIONS = { errorCorrectionLevel: 'M' as const, margin: DEFAULT_QR_QUIET_ZONE }
@@ -45,6 +45,7 @@ export function buildVoucherCsv(batch: VoucherBatchRow, vouchers: Array<{ code: 
       batch.valid_until ? batch.valid_until.slice(0, 10) : '',
       `qr/${voucher.code}.svg`,
       `qr/${voucher.code}.png`,
+      batch.deposit_mode,
     ].map(csvField).join(','))
   }
   return '﻿' + lines.join('\r\n') + '\r\n'

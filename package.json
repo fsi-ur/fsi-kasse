@@ -22,6 +22,8 @@
     "setup:migrate:order-change-requests": "node --env-file=.env scripts/migrate-order-change-requests.mjs",
     "setup:migrate:vouchers": "node --env-file=.env scripts/migrate-vouchers.mjs",
     "setup:migrate:event-affiliations": "node --env-file=.env scripts/migrate-event-affiliations.mjs",
+    "setup:migrate:deposit-returns": "node --env-file=.env scripts/migrate-deposit-returns.mjs",
+    "setup:convert-negative-deposit-items": "node --env-file=.env scripts/convert-negative-deposit-items.mjs",
     "setup:migrate:users-to-accounting": "node --env-file=.env scripts/migrate-users-to-accounting.mjs",
     "setup:migrate:cashiers-to-accounting": "node --env-file=.env scripts/migrate-cashiers-to-accounting-members.mjs",
     "setup:migrate:events-to-accounting": "node --env-file=.env scripts/migrate-events-to-accounting.mjs",

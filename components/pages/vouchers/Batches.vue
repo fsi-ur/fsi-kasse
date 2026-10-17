@@ -124,6 +124,7 @@
 </template>
 
 <script setup lang="ts">
+import { voucherDepositMode } from '~/utils/voucherDeposit'
 import { useI18n } from '~/composables/useI18n'
 import { useToast } from '~/composables/useToast'
 import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
@@ -171,7 +172,7 @@ const columns: AdvancedTableColumn<any>[] = [
     key: 'deposit',
     label: t('common.deposit'),
     mobile: 'hidden',
-    getValue: row => row.includes_deposit ? t('vouchers.batches.depositIncluded') : t('vouchers.batches.depositExtra'),
+    getValue: row => t(`vouchers.depositMode.${voucherDepositMode(row)}`),
   },
   {
     key: 'event',
