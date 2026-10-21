@@ -111,6 +111,12 @@
       {{ t('orderChanges.cancelOrderHint') }}
     </p>
 
+    <p v-if="order?.payment_method === 'card'" class="rounded-lg bg-warning-50 px-3 py-2 text-sm text-warning-900">
+      {{ hasChanges && newTotal !== originalTotal
+        ? t('card.change.difference', { amount: formatCurrency(Math.abs(newTotal - originalTotal)) })
+        : t('card.change.notice') }}
+    </p>
+
     <div>
       <label for="order-change-reason" class="section-title block">{{ t('orderChanges.reason') }}</label>
       <textarea

@@ -25,8 +25,11 @@ export async function getAffiliationById(id: number, options: { activeOnly?: boo
   } satisfies AffiliationRow
 }
 
+/** What scoping needs of an actor — also rebuilt from a card payment's stored snapshot when it is booked later. */
+export type ActorRef = Pick<User, 'kind' | 'affiliation_id'>
+
 /** Scoped = a guest with an affiliation; they only ever see and touch their own affiliation. */
-export function getActorScope(actor: User): number | null {
+export function getActorScope(actor: ActorRef): number | null {
   if (actor.kind === 'user') return null
   return actor.affiliation_id ?? null
 }
@@ -89,7 +92,7 @@ async function isAffiliationAllowedAtEvent(affiliationId: number, eventId: numbe
 }
 
 /** Regular users and unaffiliated guests may use every event; scoped guests only those that allow their affiliation. */
-export async function canAccessEvent(actor: User, eventId: number) {
+export async function canAccessEvent(actor: ActorRef, eventId: number) {
   const scope = getActorScope(actor)
   if (scope == null) return true
   return isAffiliationAllowedAtEvent(scope, eventId)

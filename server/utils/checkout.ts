@@ -2,8 +2,7 @@ import { query } from '~/server/utils/db'
 import { normalizeBigInt } from '~/server/utils/normalize'
 import { getCashRegisterCashierById } from '~/server/utils/cashiers'
 import { getCashRegisterEventById } from '~/server/utils/events'
-import { canAccessEvent, canCashierWorkEvent } from '~/server/utils/affiliations'
-import type { User } from '~/types/user'
+import { canAccessEvent, canCashierWorkEvent, type ActorRef } from '~/server/utils/affiliations'
 import { normalizeVoucherCode } from '~/utils/voucherCode'
 
 interface ItemRow {
@@ -69,6 +68,15 @@ export function cashAmountSql(alias = 'oi') {
   return `(${alias}.quantity * CASE ${alias}.line_kind
     WHEN 'voucher_redemption' THEN IF(${alias}.voucher_covers_deposit = 1, 0, ${alias}.unit_deposit)
     ELSE ${alias}.unit_price + ${alias}.unit_deposit END)`
+}
+
+/**
+ * `alias.payment_method = 'cash'|'card'` — a constant fragment. Every figure
+ * labelled cash ("Bargeld", "Kasse") filters on it; revenue figures stay
+ * method-agnostic and add a split.
+ */
+export function paymentMethodFilterSql(alias: string, method: 'cash' | 'card') {
+  return `${alias}.payment_method = '${method === 'card' ? 'card' : 'cash'}'`
 }
 
 /** Returns the lower-cased UUID, or null when the value is not a UUID. */
@@ -151,7 +159,7 @@ function priceKey(price: unknown, deposit: unknown) {
   return `${toCents(price)}|${toCents(deposit)}`
 }
 
-export async function validateCashierAndEvent(actor: User, cashierId: number, eventId: number) {
+export async function validateCashierAndEvent(actor: ActorRef, cashierId: number, eventId: number) {
   const selectedCashier = await getCashRegisterCashierById(cashierId)
   if (!selectedCashier) {
     return { ok: false as const, error: 'Selected cashier does not exist' }
@@ -176,7 +184,7 @@ export async function validateCashierAndEvent(actor: User, cashierId: number, ev
 
 /** The event allowlist: a scoped guest and an affiliated guest cashier both need their affiliation allowed. */
 export async function validateEventAccess(
-  actor: User,
+  actor: ActorRef,
   cashier: { is_guest: boolean, affiliation_id: number | null },
   eventId: number,
 ) {

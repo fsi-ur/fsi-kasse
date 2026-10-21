@@ -21,7 +21,11 @@ export default defineEventHandler(async (event) => {
       oi.unit_deposit AS deposit,
       oi.line_kind,
       oi.voucher_covers_deposit,
-      v.code AS voucher_code
+      v.code AS voucher_code,
+      o.payment_method,
+      cp.sumup_transaction_code,
+      cp.tip_amount,
+      ca.name AS card_affiliation
     FROM orders o
     JOIN cashiers c ON o.cashier_id = c.id
     JOIN order_items oi ON oi.order_id = o.id
@@ -29,6 +33,8 @@ export default defineEventHandler(async (event) => {
     LEFT JOIN vouchers v ON v.id = oi.voucher_id
     JOIN events e ON e.id = o.event_id
     LEFT JOIN stands s ON s.id = o.stand_id
+    LEFT JOIN card_payments cp ON cp.client_uuid = o.client_uuid AND cp.status = 'booked'
+    LEFT JOIN affiliations ca ON ca.id = cp.affiliation_id
     ORDER BY o.created_at DESC
   `)
 
@@ -39,11 +45,14 @@ export default defineEventHandler(async (event) => {
       p.created_at,
       c.name AS cashier,
       m.name AS member,
-      p.amount
+      p.amount,
+      p.payment_method,
+      cp.sumup_transaction_code
     FROM fachschaft_payments p
     JOIN cashiers c ON p.cashier_id = c.id
     JOIN cashiers m ON p.member_id = m.id
     JOIN events e ON p.event_id = e.id
+    LEFT JOIN card_payments cp ON cp.client_uuid = p.client_uuid AND cp.status = 'booked'
     ORDER BY p.created_at DESC
   `)
 
@@ -55,17 +64,26 @@ export default defineEventHandler(async (event) => {
       c.name AS cashier,
       s.name AS stand,
       d.amount,
-      d.order_id
+      d.order_id,
+      d.payment_method,
+      cp.sumup_transaction_code,
+      cp.tip_amount,
+      ca.name AS card_affiliation
     FROM donations d
     JOIN cashiers c ON d.cashier_id = c.id
     LEFT JOIN stands s ON s.id = d.stand_id
     JOIN events e ON d.event_id = e.id
+    LEFT JOIN card_payments cp ON cp.client_uuid = d.client_uuid AND cp.status = 'booked'
+    LEFT JOIN affiliations ca ON ca.id = cp.affiliation_id
     ORDER BY d.created_at DESC
   `)
 
   // Total is the line's worth at the charged prices; Cash Amount is what the
   // customer actually paid (a voucher redemption only its uncovered deposit).
-  let csv = 'Order ID,Event,Date,Cashier,Stand,Fachschaft,Item,Quantity,Price,Deposit,Total,Line Kind,Voucher Code,Cash Amount'
+  // Card columns: the SumUp transaction, the association the card money is
+  // settled to (empty = the account holder) and the terminal tip, which is part of the
+  // order's donation.
+  let csv = 'Order ID,Event,Date,Cashier,Stand,Fachschaft,Item,Quantity,Price,Deposit,Total,Line Kind,Voucher Code,Cash Amount,Payment Method,SumUp Transaction,Association,Tip'
 
   for (const row of orderRows as any[]) {
     const total =
@@ -91,10 +109,14 @@ export default defineEventHandler(async (event) => {
       row.line_kind,
       row.voucher_code ?? '',
       cashAmount.toFixed(2),
+      row.payment_method ?? 'cash',
+      row.sumup_transaction_code ?? '',
+      row.card_affiliation ? `"${row.card_affiliation}"` : '',
+      row.tip_amount == null ? '' : Number(row.tip_amount).toFixed(2),
     ].join(',')}`
   }
 
-  csv += '\n\nPayment ID,Event,Date,Cashier,Member,Amount'
+  csv += '\n\nPayment ID,Event,Date,Cashier,Member,Amount,Payment Method,SumUp Transaction'
 
   for (const row of paymentRows as any[]) {
     csv += `\n${[
@@ -103,11 +125,13 @@ export default defineEventHandler(async (event) => {
       new Date(row.created_at).toISOString(),
       `"${row.cashier}"`,
       `"${row.member}"`,
-      Number(row.amount).toFixed(2)
+      Number(row.amount).toFixed(2),
+      row.payment_method ?? 'cash',
+      row.sumup_transaction_code ?? '',
     ].join(',')}`
   }
 
-  csv += '\n\nDonation ID,Event,Date,Cashier,Stand,Amount,Linked Order ID'
+  csv += '\n\nDonation ID,Event,Date,Cashier,Stand,Amount,Linked Order ID,Payment Method,SumUp Transaction,Association,Tip'
 
   for (const row of donationRows as any[]) {
     csv += `\n${[
@@ -117,7 +141,11 @@ export default defineEventHandler(async (event) => {
       `"${row.cashier}"`,
       row.stand ? `"${row.stand}"` : '',
       Number(row.amount).toFixed(2),
-      row.order_id ?? ''
+      row.order_id ?? '',
+      row.payment_method ?? 'cash',
+      row.sumup_transaction_code ?? '',
+      row.card_affiliation ? `"${row.card_affiliation}"` : '',
+      row.tip_amount == null ? '' : Number(row.tip_amount).toFixed(2),
     ].join(',')}`
   }
 

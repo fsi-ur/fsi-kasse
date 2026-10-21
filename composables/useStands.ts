@@ -5,6 +5,10 @@ export interface StandEntry {
   name: string
   is_active: boolean
   item_ids: number[]
+  card_enabled: boolean
+  card_reader_name: string | null
+  /** An active, paired terminal is assigned. */
+  card_reader_ready: boolean
 }
 
 export const useStands = () => {
@@ -32,6 +36,9 @@ export const useStands = () => {
       name: String(stand.name),
       is_active: stand.is_active === true || stand.is_active === 1,
       item_ids: Array.isArray(stand.item_ids) ? stand.item_ids.map(Number) : [],
+      card_enabled: stand.card_enabled === true,
+      card_reader_name: stand.card_reader_name == null ? null : String(stand.card_reader_name),
+      card_reader_ready: stand.card_reader_ready === true,
     }))
 
     if (!result.stale && selectedStand.value && !effectiveStand.value) {

@@ -294,8 +294,12 @@ html {
         @apply bg-white border border-accent-500 rounded-lg py-2 px-4 text-accent-600 text-sm cursor-pointer transition-colors;
     }
 
-    .btn-outline:hover {
+    .btn-outline:not(:disabled):hover {
         @apply bg-accent-50;
+    }
+
+    .btn-outline:disabled {
+        @apply opacity-50 cursor-not-allowed;
     }
 
     .section-title {

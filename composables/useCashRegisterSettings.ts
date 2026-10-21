@@ -4,6 +4,10 @@ import { cachedFetch } from '~/composables/useCachedFetch'
 const FALLBACK_SETTINGS: CashRegisterSettings = {
   fachschaft_payment_amount: 10,
   fachschaft_enabled: true,
+  card_payments_enabled: false,
+  card_tip_rates: [],
+  card_tip_with_donation: false,
+  card_fee_rate: 1.39,
 }
 
 export const useCashRegisterSettings = () => {
@@ -11,6 +15,8 @@ export const useCashRegisterSettings = () => {
   const canManage = useState<boolean>('cash_register_settings_can_manage', () => false)
   const accountingMode = useState<'standalone' | 'connected'>('cash_register_settings_mode', () => 'standalone')
   const loaded = useState<boolean>('cash_register_settings_loaded', () => false)
+  /** SumUp is set up on the server; without it every card UI stays hidden. */
+  const cardConfigured = useState<boolean>('cash_register_settings_card_configured', () => false)
 
   async function loadSettings(force = false) {
     if (loaded.value && !force) return settings.value
@@ -21,6 +27,7 @@ export const useCashRegisterSettings = () => {
         settings.value = res.settings
         canManage.value = res.can_manage
         accountingMode.value = res.accounting_mode
+        cardConfigured.value = Boolean(res.card_configured)
         loaded.value = true
       }
     } catch {
@@ -30,5 +37,5 @@ export const useCashRegisterSettings = () => {
     return settings.value
   }
 
-  return { settings, canManage, accountingMode, loaded, loadSettings }
+  return { settings, canManage, accountingMode, cardConfigured, loaded, loadSettings }
 }

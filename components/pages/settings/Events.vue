@@ -42,6 +42,14 @@
       >
         {{ fachschaftOn(item) ? t('events.fachschaftDisable') : t('events.fachschaftEnable') }}
       </button>
+      <button
+        v-if="cardConfigured"
+        type="button"
+        class="hover:underline cursor-pointer text-info-600"
+        @click="toggleCard(item)"
+      >
+        {{ cardOn(item) ? t('card.event.disable') : t('card.event.enable') }}
+      </button>
     </template>
 
     <template #modal-fields="{ editingItem: entity }">
@@ -163,6 +171,7 @@ import { useToast } from '~/composables/useToast'
 import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
 import type { EntityManagerColumn } from './EntityManager.vue'
 import type { SearchSelectOption } from '~/components/Common/SearchSelect.vue'
+import { useCashRegisterSettings } from '~/composables/useCashRegisterSettings'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -171,7 +180,24 @@ const { formatLocalDateTime } = useLocaleFormatters()
 const managerRef = ref<{ loadItems: () => Promise<void> } | null>(null)
 const readOnly = ref(false)
 
-const columns: EntityManagerColumn[] = [
+const { cardConfigured } = useCashRegisterSettings()
+
+const cardColumn: EntityManagerColumn = {
+  key: 'card_enabled',
+  label: t('card.event.column'),
+  filterable: false,
+  sortable: false,
+  getValue: item => cardOn(item) ? t('card.event.allowed') : t('card.event.blocked'),
+  format: item => cardOn(item) ? t('card.event.allowed') : t('card.event.blocked'),
+}
+
+const columns = computed(() => {
+  if (!cardConfigured.value) return baseColumns
+  const index = baseColumns.findIndex(column => column.key === 'fachschaft_enabled') + 1
+  return [...baseColumns.slice(0, index), cardColumn, ...baseColumns.slice(index)]
+})
+
+const baseColumns: EntityManagerColumn[] = [
   {
     key: 'starts_at',
     label: t('events.startsAt'),
@@ -214,6 +240,26 @@ function toDateInputValue(value: unknown): string | null {
 
 function fachschaftOn(item: unknown) {
   return Boolean((item as { fachschaft_enabled?: unknown }).fachschaft_enabled)
+}
+
+function cardOn(item: unknown) {
+  return Boolean(Number((item as { card_enabled?: unknown }).card_enabled ?? 1))
+}
+
+async function toggleCard(item: { id: number }) {
+  try {
+    const res = await $fetch<{ ok: boolean, error?: string }>('/api/events/card', {
+      method: 'POST',
+      body: { id: item.id, card_enabled: cardOn(item) ? 0 : 1 },
+    })
+    if (!res.ok) {
+      toast.error(res.error || t('common.unknownError'))
+      return
+    }
+    await managerRef.value?.loadItems()
+  } catch {
+    toast.error(t('common.unknownError'))
+  }
 }
 
 async function toggleFachschaft(item: { id: number }) {

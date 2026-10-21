@@ -3,7 +3,7 @@ import { query, withTransaction } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
 import { loadOrderLines, orderMatchesSnapshot, parseChangeText } from '~/server/utils/orderChanges'
-import { isVoucherLineKind, type LineKind } from '~/server/utils/checkout'
+import { isVoucherLineKind, lineCashTotal, round2, type LineKind } from '~/server/utils/checkout'
 import {
   addVoucherDelta,
   applyVoucherDeltas,
@@ -64,6 +64,12 @@ function voucherDeltas(original: RequestLineRow[], proposed: RequestLineRow[]) {
   return deltas
 }
 
+/** The cash the customer pays for one side of a change request (0 for a Fachschaft order). */
+function sideCash(fachschaft: boolean, lines: RequestLineRow[]) {
+  if (fachschaft) return 0
+  return round2(lines.reduce((sum, line) => sum + lineCashTotal(line), 0))
+}
+
 export default defineEventHandler(async (event) => {
   const current = await requirePermission(event, 'cash_register.manage')
   if (!current.ok) return current
@@ -100,8 +106,8 @@ export default defineEventHandler(async (event) => {
       if (request.status !== 'pending') return { ok: false as const, error: 'Change request has already been reviewed' }
 
       if (decision === 'approve') {
-        const orders = await query<Array<{ id: number, fachschaft: number, event_id: unknown, created_at: unknown }>>(
-          `SELECT id, fachschaft, event_id, created_at FROM orders WHERE id = ? FOR UPDATE`,
+        const orders = await query<Array<{ id: number, fachschaft: number, event_id: unknown, created_at: unknown, payment_method: string }>>(
+          `SELECT id, fachschaft, event_id, created_at, payment_method FROM orders WHERE id = ? FOR UPDATE`,
           [request.order_id],
           conn,
         )
@@ -126,6 +132,13 @@ export default defineEventHandler(async (event) => {
           { fachschaft: Boolean(request.original_fachschaft), lines: original },
         )
         if (!matches) return { ok: false as const, error: 'The order has changed since the change request was made' }
+
+        // A card order is never refunded automatically: the admin settles the
+        // difference by hand (cash or a refund in the SumUp dashboard) and says how.
+        const difference = round2(sideCash(Boolean(request.proposed_fachschaft), proposed) - sideCash(Boolean(request.original_fachschaft), original))
+        if (order.payment_method === 'card' && difference !== 0 && !note) {
+          return { ok: false as const, error: 'Kartenzahlung: Bitte in der Notiz angeben, wie die Differenz ausgeglichen wurde' }
+        }
 
         // A voucher deleted after the request was made leaves its line without a voucher.
         if (proposed.some(line => isVoucherLineKind(line.line_kind) && line.voucher_id == null)) {

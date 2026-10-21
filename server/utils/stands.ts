@@ -8,11 +8,23 @@ export interface Stand {
   name: string
   is_active: boolean
   item_ids: number[]
+  card_enabled: boolean
+  card_reader_id: number | null
+  card_reader_name: string | null
+  /** The assigned terminal is active and paired, so a card payment can start on it. */
+  card_reader_ready: boolean
 }
 
 export async function listStands(): Promise<Stand[]> {
-  const rows = await query<Array<{ id: unknown, name: unknown, is_active: unknown }>>(
-    `SELECT id, name, is_active FROM stands ORDER BY name ASC`,
+  const rows = await query<Array<{
+    id: unknown, name: unknown, is_active: unknown, card_enabled: unknown, card_reader_id: unknown,
+    card_reader_name: unknown, reader_active: unknown, pairing_status: unknown
+  }>>(
+    `SELECT s.id, s.name, s.is_active, s.card_enabled, s.card_reader_id,
+       r.name AS card_reader_name, r.is_active AS reader_active, r.pairing_status
+     FROM stands s
+     LEFT JOIN card_readers r ON r.id = s.card_reader_id
+     ORDER BY s.name ASC`,
   )
   const links = await query<Array<{ stand_id: unknown, item_id: unknown }>>(
     `SELECT stand_id, item_id FROM stand_items ORDER BY item_id ASC`,
@@ -30,6 +42,10 @@ export async function listStands(): Promise<Stand[]> {
     name: String(row.name),
     is_active: Number(row.is_active) === 1,
     item_ids: itemIdsByStand.get(Number(row.id)) ?? [],
+    card_enabled: Number(row.card_enabled) === 1,
+    card_reader_id: row.card_reader_id == null ? null : Number(row.card_reader_id),
+    card_reader_name: row.card_reader_name == null ? null : String(row.card_reader_name),
+    card_reader_ready: row.card_reader_id != null && Number(row.reader_active) === 1 && row.pairing_status === 'paired',
   }))
 }
 

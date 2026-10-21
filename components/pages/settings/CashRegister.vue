@@ -38,6 +38,74 @@
       </button>
     </section>
 
+    <section v-if="cardConfigured" class="rounded-xl border border-base-200 p-4 space-y-3">
+      <div>
+        <h3 class="font-semibold">{{ t('card.settings.title') }}</h3>
+        <p class="text-sm text-base-600">{{ t('card.settings.text') }}</p>
+      </div>
+
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input v-model="cardEnabled" type="checkbox" :disabled="isSavingCard">
+        <span class="font-medium">{{ t('card.settings.enabled') }}</span>
+      </label>
+
+      <label class="flex items-start gap-2 cursor-pointer">
+        <input v-model="tipEnabled" type="checkbox" class="mt-1" :disabled="isSavingCard">
+        <span>
+          <span class="block font-medium">{{ t('card.settings.tipEnabled') }}</span>
+          <span class="block text-sm text-base-600">{{ t('card.settings.tipEnabledHelp') }}</span>
+        </span>
+      </label>
+
+      <div v-if="tipEnabled" class="space-y-3 pl-6">
+        <div class="flex flex-col gap-1">
+          <span id="card-tip-rates-label" class="text-xs text-base-600">{{ t('card.settings.tipRates') }}</span>
+          <div class="flex flex-wrap gap-3" role="group" aria-labelledby="card-tip-rates-label">
+            <div v-for="(_, index) in tipInputs" :key="index" class="flex items-center gap-1">
+              <input
+                v-model="tipInputs[index]"
+                type="number"
+                min="1"
+                max="99"
+                step="1"
+                class="input w-20"
+                :aria-label="t('card.settings.tipRateN', { n: String(index + 1) })"
+                :disabled="isSavingCard"
+              >
+              <span class="text-sm text-base-600">%</span>
+            </div>
+          </div>
+        </div>
+
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input v-model="tipWithDonation" type="checkbox" :disabled="isSavingCard">
+          <span class="font-medium">{{ t('card.settings.tipWithDonation') }}</span>
+        </label>
+      </div>
+
+      <div class="field max-w-xs">
+        <label for="card-fee-rate">{{ t('card.settings.feeRate') }}</label>
+        <input
+          id="card-fee-rate"
+          v-model="feeRate"
+          type="number"
+          min="0"
+          max="99.99"
+          step="0.01"
+          class="input"
+          :disabled="isSavingCard"
+        >
+        <p class="text-xs text-base-500">{{ t('card.settings.feeRateHelp') }}</p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <button class="btn-primary" :disabled="isSavingCard" @click="saveCardSettings">
+          {{ isSavingCard ? t('settings.saving') : t('settings.save') }}
+        </button>
+        <span v-if="cardFormSynced && cardDirty && !isSavingCard" class="text-sm text-warning-700">{{ t('card.settings.unsaved') }}</span>
+      </div>
+    </section>
+
     <section class="rounded-xl border border-base-200 p-4 space-y-3">
       <div>
         <h3 class="font-semibold">{{ t('settings.exportTitle') }}</h3>
@@ -226,7 +294,7 @@ import type { SnapshotErrorCode } from '~/server/utils/databaseSnapshots'
 
 const { t } = useI18n()
 const toast = useToast()
-const { settings, loadSettings } = useCashRegisterSettings()
+const { settings, cardConfigured, loadSettings } = useCashRegisterSettings()
 const { formatDateTime } = useLocaleFormatters()
 const { hasPermission, fetchSession, redirectToLogin } = useAuth()
 const runtimeConfig = useRuntimeConfig()
@@ -239,6 +307,93 @@ const MAX_SNAPSHOT_UPLOAD_LABEL = '256 MB'
 const fachschaftAmount = ref('')
 const fachschaftEnabled = ref(true)
 const isSaving = ref(false)
+
+const DEFAULT_TIP_PERCENTS = [5, 10, 15]
+const cardEnabled = ref(false)
+const tipEnabled = ref(false)
+const tipInputs = ref<Array<number | string>>([...DEFAULT_TIP_PERCENTS])
+const tipWithDonation = ref(false)
+const feeRate = ref<number | string>('')
+const isSavingCard = ref(false)
+const cardFormSynced = ref(false)
+
+function syncCardForm() {
+  cardFormSynced.value = true
+  cardEnabled.value = settings.value.card_payments_enabled
+  const stored = settings.value.card_tip_rates
+  tipEnabled.value = stored.length > 0
+  tipInputs.value = stored.length ? stored.map(rate => Math.round(rate * 100)) : [...DEFAULT_TIP_PERCENTS]
+  tipWithDonation.value = settings.value.card_tip_with_donation
+  feeRate.value = settings.value.card_fee_rate
+}
+
+function formTipRates(): { rates: number[] } | { error: string } {
+  if (!tipEnabled.value) return { rates: [] }
+  const percents: number[] = []
+  for (const input of tipInputs.value) {
+    const percent = Number(input)
+    if (input === '' || !Number.isInteger(percent) || percent < 1 || percent > 99) return { error: 'card.settings.invalidTipRate' }
+    percents.push(percent)
+  }
+  if (new Set(percents).size !== percents.length) return { error: 'card.settings.duplicateTipRates' }
+  return { rates: percents.sort((a, b) => a - b).map(percent => percent / 100) }
+}
+
+const cardDirty = computed(() => {
+  const tips = formTipRates()
+  return cardEnabled.value !== settings.value.card_payments_enabled
+    || tipWithDonation.value !== settings.value.card_tip_with_donation
+    || feeRate.value === ''
+    || Number(feeRate.value) !== settings.value.card_fee_rate
+    || !('rates' in tips)
+    || tips.rates.join() !== settings.value.card_tip_rates.join()
+})
+
+async function saveCardSettings() {
+  if (isSavingCard.value) return
+
+  const tips = formTipRates()
+  if ('error' in tips) {
+    toast.error(t(tips.error))
+    return
+  }
+
+  const fee = Number(feeRate.value)
+  if (feeRate.value === '' || !Number.isFinite(fee) || fee < 0 || fee >= 100) {
+    toast.error(t('card.settings.invalidFeeRate'))
+    return
+  }
+
+  isSavingCard.value = true
+  try {
+    const res = await $fetch<{ ok: boolean, settings?: CashRegisterSettings, error?: string }>('/api/settings/save', {
+      method: 'POST',
+      body: {
+        fachschaft_payment_amount: settings.value.fachschaft_payment_amount,
+        fachschaft_enabled: settings.value.fachschaft_enabled,
+        card_payments_enabled: cardEnabled.value,
+        card_tip_rates: tips.rates,
+        card_tip_with_donation: tipWithDonation.value,
+        card_fee_rate: fee,
+      },
+    })
+
+    if (!res.ok) {
+      toast.error(res.error || t('settings.saveFailed'))
+      return
+    }
+
+    if (res.settings) {
+      settings.value = res.settings
+      syncCardForm()
+    }
+    toast.success(t('settings.saved'))
+  } catch {
+    toast.error(t('settings.saveFailed'))
+  } finally {
+    isSavingCard.value = false
+  }
+}
 
 const snapshotPassword = ref('')
 const isDownloadingSnapshot = ref(false)
@@ -292,6 +447,8 @@ const canRestorePreview = computed(() => {
 async function reloadSettings() {
   const previousLoaded = String(settings.value.fachschaft_payment_amount)
   const previousEnabled = settings.value.fachschaft_enabled
+  // Like the amount below: a refresh never discards unsaved card settings.
+  const keepCardForm = cardFormSynced.value && cardDirty.value
   await loadSettings(true)
   if (fachschaftEnabled.value === previousEnabled) fachschaftEnabled.value = settings.value.fachschaft_enabled
   // Sync the form field only while it still shows the previously loaded value,
@@ -299,6 +456,7 @@ async function reloadSettings() {
   if (!fachschaftAmount.value || fachschaftAmount.value === previousLoaded) {
     fachschaftAmount.value = String(settings.value.fachschaft_payment_amount)
   }
+  if (!isSavingCard.value && !keepCardForm) syncCardForm()
 }
 
 onMounted(reloadSettings)

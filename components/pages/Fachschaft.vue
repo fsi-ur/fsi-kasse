@@ -4,6 +4,8 @@
       <div class="ml-auto flex flex-col gap-2 md:flex-row md:gap-4">
         <MenuSelectCashier />
         <MenuSelectEvent />
+        <!-- Card payments run on the selected stand's terminal -->
+        <MenuSelectStand v-if="cardVisible" />
       </div>
     </template>
 
@@ -30,13 +32,44 @@
             @clear-selection="selectedMember = ''"
           />
         </div>
+        <div v-if="cardOffered" class="field">
+          <label>{{ t('card.method') }}</label>
+          <div class="flex rounded-lg border border-base-300 overflow-hidden text-sm" role="radiogroup" :aria-label="t('card.method')">
+            <button
+              type="button"
+              role="radio"
+              :aria-checked="paymentMethod === 'cash'"
+              class="flex items-center justify-center gap-1.5 px-3 py-2 cursor-pointer transition-colors"
+              :class="paymentMethod === 'cash' ? 'bg-accent-500 text-white' : 'bg-white text-base-600 hover:bg-base-50'"
+              @click="paymentMethod = 'cash'"
+            >
+              <Icon name="material-symbols:payments-outline-rounded" class="h-4 w-4" aria-hidden="true" />
+              {{ t('card.cash') }}
+            </button>
+            <button
+              type="button"
+              role="radio"
+              :aria-checked="paymentMethod === 'card'"
+              class="flex items-center justify-center gap-1.5 px-3 py-2 border-l border-base-300 transition-colors not-disabled:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              :class="paymentMethod === 'card' ? 'bg-accent-500 text-white' : 'bg-white text-base-600 not-disabled:hover:bg-base-50'"
+              :disabled="Boolean(unavailableReason)"
+              @click="paymentMethod = 'card'"
+            >
+              <Icon name="material-symbols:credit-card-outline" class="h-4 w-4" aria-hidden="true" />
+              {{ t('card.card') }}
+            </button>
+          </div>
+        </div>
         <button
-          class="btn-primary"
-          :disabled="!selectedMember || !selectedCashier || !selectedEvent || !!disabledReason"
+          class="btn-primary py-2.25"
+          :disabled="!selectedMember || !selectedCashier || !selectedEvent || !!disabledReason || cardBlocked || submitting"
           @click="openConfirm"
         >
-          {{ t('fachschaft.markPaid', { amount: formattedAmount }) }}
+          {{ payingByCard
+            ? t('card.payWithCard', { amount: formattedAmount })
+            : t('fachschaft.markPaid', { amount: formattedAmount }) }}
         </button>
+        <p v-if="cardOffered && unavailableReason" class="basis-full text-xs text-base-500">{{ unavailableReason }}</p>
       </div>
 
       <CommonPageTableCard
@@ -63,6 +96,13 @@
             />
             <span v-else>{{ t('fachschaft.statusBooked') }}</span>
           </template>
+
+          <template #cell-payment_method="{ row }">
+            <CommonStatusBadge
+              :label="row.payment_method === 'card' ? t('card.card') : t('card.cash')"
+              :tone="row.payment_method === 'card' ? 'base' : 'baseMuted'"
+            />
+          </template>
         </CommonAdvancedTable>
       </CommonPageTableCard>
     </template>
@@ -76,8 +116,21 @@
   >
     <template #message>
       {{ t('fachschaft.confirmQuestion', { name: selectedMemberLabel, amount: formattedAmount }) }}
+      <span v-if="payingByCard" class="mt-2 block font-bold text-accent-700">
+        {{ t('card.confirmCharge', { amount: formattedAmount }) }}
+      </span>
+      <span v-else-if="cardOffered" class="mt-2 block text-base-600">{{ t('card.confirmCash') }}</span>
     </template>
   </FormConfirmation>
+
+  <CardPaymentModal
+    kind="fachschaft_payment"
+    :back-label="t('card.modal.back')"
+    @retry-card="retryCard"
+    @pay-cash="payCashInstead"
+    @back="cardPayment.dismiss()"
+    @acknowledge="acknowledgeCardPayment"
+  />
 </template>
 
 <script setup lang="ts">
@@ -92,6 +145,7 @@ import { cachedFetch } from '~/composables/useCachedFetch'
 import { onOfflineDataChanged, useOfflineQueue, type FachschaftPayPayload } from '~/composables/useOfflineQueue'
 import { createClientUuid } from '~/utils/network'
 import { positiveIdOrEmpty, usePersistedState } from '~/composables/usePersistedState'
+import { useCardAvailability, useCardPayment } from '~/composables/useCardPayment'
 
 const members = ref<any[]>([])
 const payments = ref<any[]>([])
@@ -115,6 +169,15 @@ const toast = useToast()
 const { settings, loadSettings } = useCashRegisterSettings()
 const { onRefresh } = useAppRefresh()
 const { entries: outboxEntries, submit } = useOfflineQueue()
+const { effectiveStand } = useStands()
+const cardPayment = useCardPayment()
+const { cardVisible, cardOffered, unavailableReason, loadAvailability } = useCardAvailability()
+
+const submitting = ref(false)
+const paymentMethod = usePersistedState<'cash' | 'card'>('fachschaftPaymentMethod', () => 'cash',
+  stored => stored === 'cash' || stored === 'card' ? stored : undefined)
+const payingByCard = computed(() => cardOffered.value && paymentMethod.value === 'card')
+const cardBlocked = computed(() => payingByCard.value && Boolean(unavailableReason.value))
 
 const paymentRows = computed(() => {
   const queued = outboxEntries.value
@@ -126,6 +189,7 @@ const paymentRows = computed(() => {
       amount: entry.display.localTotal,
       created_at: new Date(entry.queued_at).toISOString(),
       outboxStatus: entry.status,
+      payment_method: 'cash',
     }))
 
   return [...queued, ...payments.value]
@@ -188,6 +252,12 @@ const paymentColumns: AdvancedTableColumn<any>[] = [
     format: payment => formatCurrency(Number(payment.amount)),
   },
   {
+    key: 'payment_method',
+    label: t('card.method'),
+    filterable: true,
+    getValue: payment => payment.payment_method === 'card' ? t('card.card') : t('card.cash'),
+  },
+  {
     key: 'status',
     label: t('fachschaft.status'),
     filterable: true,
@@ -220,6 +290,7 @@ async function loadEventFlag() {
 
 async function reload() {
   await Promise.allSettled([
+    loadAvailability(true),
     loadSettings(true),
     loadEventFlag(),
     loadMembers(),
@@ -227,7 +298,10 @@ async function reload() {
   ])
 }
 
-onMounted(reload)
+onMounted(() => {
+  reload()
+  if (cardPayment.active.value?.kind === 'fachschaft_payment') cardPayment.resume()
+})
 onRefresh(reload)
 onOfflineDataChanged(reload)
 
@@ -239,18 +313,32 @@ async function openConfirm() {
   showConfirm.value = true
 }
 
-async function markPaid() {
-  showConfirm.value = false
-
-  if (!selectedCashier.value || !selectedEvent.value || !selectedMember.value) return
-
-  const payload: FachschaftPayPayload = {
+function buildPayload(): FachschaftPayPayload {
+  return {
     client_uuid: createClientUuid(),
     member_id: Number(selectedMember.value),
     amount: settings.value.fachschaft_payment_amount,
     cashier_id: Number(selectedCashier.value),
     event_id: Number(selectedEvent.value),
   }
+}
+
+async function markPaid() {
+  showConfirm.value = false
+
+  if (!selectedCashier.value || !selectedEvent.value || !selectedMember.value) return
+  if (submitting.value) return
+  submitting.value = true
+  try {
+    if (payingByCard.value) await payByCard()
+    else await payCash()
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function payCash() {
+  const payload = buildPayload()
 
   let outcome
   try {
@@ -272,6 +360,58 @@ async function markPaid() {
     return
   }
 
+  await loadPayments()
+}
+
+/** Pushes the payment to the selected stand's terminal; the server books it once SumUp reports success. */
+async function payByCard() {
+  if (unavailableReason.value) {
+    toast.error(unavailableReason.value)
+    return
+  }
+  const stand = effectiveStand.value
+  const result = await cardPayment.start('fachschaft_payment', buildPayload(), {
+    standId: stand?.id ?? null,
+    amount: settings.value.fachschaft_payment_amount,
+    standName: stand?.name ?? null,
+    readerName: stand?.card_reader_name ?? null,
+  })
+  if (!result.ok) toast.error(result.error)
+}
+
+watch(() => cardPayment.payment.value, async (state) => {
+  if (!state || state.kind !== 'fachschaft_payment' || state.status !== 'booked') return
+  if (cardPayment.active.value?.client_uuid !== state.client_uuid) return
+  cardPayment.dismiss()
+  toast.success(t('card.paid'))
+  await loadPayments()
+})
+
+async function retryCard() {
+  cardPayment.dismiss()
+  if (submitting.value) return
+  submitting.value = true
+  try {
+    await payByCard()
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function payCashInstead() {
+  cardPayment.dismiss()
+  paymentMethod.value = 'cash'
+  if (submitting.value) return
+  submitting.value = true
+  try {
+    await payCash()
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function acknowledgeCardPayment() {
+  cardPayment.dismiss()
   await loadPayments()
 }
 

@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
       p.id AS payment_id,
       p.created_at,
       p.amount,
+      p.payment_method,
       m.name AS member_name,
       c.name AS cashier_name
     FROM fachschaft_payments p
@@ -40,6 +41,7 @@ export default defineEventHandler(async (event) => {
         member: row.member_name,
         // The amount stored on the payment, not the current setting.
         amount: Number(row.amount),
+        payment_method: row.payment_method ?? 'cash',
         created_at: row.created_at,
       }
       payments.push(payment)

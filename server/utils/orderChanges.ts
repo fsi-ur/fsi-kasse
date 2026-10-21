@@ -53,6 +53,8 @@ export interface OrderChangeRequest {
   reviewed_by: string | null
   reviewed_at: string | null
   review_note: string | null
+  /** How the order was paid; a card order's difference is settled by hand. */
+  payment_method: 'cash' | 'card'
   original: OrderChangeSide
   proposed: OrderChangeSide
 }
@@ -122,6 +124,7 @@ interface RequestRow {
   reviewed_by: string | null
   reviewed_at: string | null
   review_note: string | null
+  payment_method: 'cash' | 'card'
 }
 
 interface RequestLineRow {
@@ -158,9 +161,12 @@ export async function loadChangeRequests(
   const rows: RequestRow[] = normalizeBigInt(await query<RequestRow[]>(
     `SELECT
        r.id, r.order_id, r.event_id, c.name AS cashier_name, r.requested_by, r.status, r.reason,
-       r.original_fachschaft, r.proposed_fachschaft, r.created_at, r.reviewed_by, r.reviewed_at, r.review_note
+       r.original_fachschaft, r.proposed_fachschaft, r.created_at, r.reviewed_by, r.reviewed_at, r.review_note,
+       COALESCE(o.payment_method, IF(cp.id IS NULL, 'cash', 'card')) AS payment_method
      FROM order_change_requests r
      LEFT JOIN cashiers c ON c.id = r.cashier_id
+     LEFT JOIN orders o ON o.id = r.order_id
+     LEFT JOIN card_payments cp ON cp.client_uuid = r.order_client_uuid AND cp.status = 'booked'
      ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
      ORDER BY r.status = 'pending' DESC, r.created_at DESC, r.id DESC`,
     params,
@@ -220,6 +226,7 @@ export async function loadChangeRequests(
       reviewed_by: row.reviewed_by,
       reviewed_at: row.reviewed_at,
       review_note: row.review_note,
+      payment_method: row.payment_method === 'card' ? 'card' : 'cash',
       original: { fachschaft: originalFachschaft, lines: lines.original, total: sideTotal(originalFachschaft, lines.original) },
       proposed: { fachschaft: proposedFachschaft, lines: lines.proposed, total: sideTotal(proposedFachschaft, lines.proposed) },
     }

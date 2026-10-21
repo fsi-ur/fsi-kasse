@@ -25,6 +25,17 @@
       <template v-else-if="data">
         <CommonOfflineNotice v-if="stale" :cached-at="cachedAt" />
 
+        <div
+          v-if="cardProblemCount > 0"
+          class="col-span-12 flex flex-wrap items-center gap-3 p-4 bg-danger-50 text-danger-900 shadow-lg rounded-xl border border-danger-200 text-sm"
+        >
+          <Icon name="material-symbols:warning-outline-rounded" class="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span class="flex-1">{{ t('overview.card.problems', { count: cardProblemCount }) }}</span>
+          <button type="button" class="btn-outline shrink-0" @click="setPage('OrderChanges', { tab: 'cardPayments' })">
+            {{ t('overview.card.openProblems') }}
+          </button>
+        </div>
+
         <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
           <h2 class="text-lg font-semibold mb-4">{{ t('overview.regularSales') }}</h2>
 
@@ -226,6 +237,42 @@
           </template>
         </div>
 
+        <div v-if="showCard" class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
+          <h2 class="text-lg font-semibold mb-4">{{ t('overview.card.title') }}</h2>
+
+          <dl class="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
+            <dt>{{ t('overview.card.salesCash') }}</dt>
+            <dd class="text-right">{{ formatCurrency(data.regular.cashRevenue) }}</dd>
+            <dt>{{ t('overview.card.salesCard') }}</dt>
+            <dd class="text-right">{{ formatCurrency(data.regular.cardRevenue) }}</dd>
+            <dt>{{ t('overview.card.donationsCard') }}</dt>
+            <dd class="text-right">{{ formatCurrency(data.donations.card) }}</dd>
+            <template v-if="data.expectedCash.payments !== null && showFachschaft">
+              <dt>{{ t('overview.card.paymentsCard') }}</dt>
+              <dd class="text-right">{{ formatCurrency(data.payments.card) }}</dd>
+            </template>
+          </dl>
+
+          <div class="mt-4 border-t border-base-200 pt-3">
+            <div class="flex justify-between font-bold text-lg">
+              <span>{{ t(standFilterActive ? 'overview.card.expectedCashStand' : 'overview.card.expectedCash') }}</span>
+              <span>{{ formatCurrency(data.expectedCash.total) }}</span>
+            </div>
+            <p class="mt-1 text-sm text-base-500">
+              {{ data.expectedCash.payments === null
+                ? t('overview.card.expectedCashStandBreakdown', {
+                  sales: formatCurrency(data.expectedCash.orders),
+                  donations: formatCurrency(data.expectedCash.donations),
+                })
+                : t('overview.card.expectedCashBreakdown', {
+                  sales: formatCurrency(data.expectedCash.orders),
+                  donations: formatCurrency(data.expectedCash.donations),
+                  payments: formatCurrency(data.expectedCash.payments),
+                }) }}
+            </p>
+          </div>
+        </div>
+
         <div class="col-span-12 xl:col-span-6 bg-white p-4 rounded-xl shadow-lg">
           <h2 class="text-lg font-semibold mb-4">{{ t('overview.lastHour') }}</h2>
 
@@ -288,12 +335,74 @@
                     <span class="md:hidden text-base-500">{{ t('overview.donations') }}: </span>{{ row.donationsLabel }}
                   </span>
                 </div>
+                <div v-if="showCard" class="mt-1 text-xs text-base-500">
+                  {{ t('overview.card.standSplit', { card: row.cardLabel, cash: row.expectedCashLabel }) }}
+                </div>
                 <div class="mt-1 h-2 rounded-full bg-base-100">
                   <div class="h-2 rounded-full bg-accent-500" :style="{ width: `${row.barPercent}%` }"></div>
                 </div>
               </button>
             </li>
           </ul>
+        </div>
+
+        <div v-if="showCard && settlement.length" class="col-span-12 bg-white p-4 rounded-xl shadow-lg">
+          <div class="mb-4 flex flex-wrap items-center gap-2">
+            <h2 class="text-lg font-semibold">{{ t('overview.settlement.title') }}</h2>
+            <button
+              type="button"
+              class="btn-secondary ml-auto inline-flex items-center gap-1.5"
+              :disabled="refreshingFees || stale"
+              @click="refreshFees"
+            >
+              <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" aria-hidden="true" />
+              {{ t('overview.settlement.refreshFees') }}
+            </button>
+          </div>
+
+          <div class="hidden md:grid grid-cols-[minmax(0,1fr)_5rem_7rem_7rem_7rem_7rem] gap-4 text-xs text-base-500 pb-1 border-b border-base-200">
+            <span>{{ t('history.stand') }}</span>
+            <span class="text-right">{{ t('overview.settlement.payments') }}</span>
+            <span class="text-right">{{ t('overview.settlement.sales') }}</span>
+            <span class="text-right">{{ t('overview.settlement.donations') }}</span>
+            <span class="text-right">{{ t('overview.settlement.fees') }}</span>
+            <span class="text-right">{{ t('overview.settlement.payout') }}</span>
+          </div>
+          <ul>
+            <li
+              v-for="row in settlement"
+              :key="row.group === 'fachschaft' ? 'fachschaft' : `stand-${row.stand_id}`"
+              class="grid grid-cols-2 md:grid-cols-[minmax(0,1fr)_5rem_7rem_7rem_7rem_7rem] gap-x-4 gap-y-1 border-b border-base-200 py-2 text-sm"
+            >
+              <span class="col-span-2 md:col-span-1 font-semibold truncate">
+                {{ row.group === 'fachschaft' ? t('overview.settlement.fachschaft') : row.stand_name ?? t('history.noStand') }}
+                <CommonStatusBadge v-if="row.unknown_fee_count > 0" class="ml-1" :label="t('overview.settlement.provisional')" tone="warning" />
+              </span>
+              <span class="md:text-right">
+                <span class="md:hidden text-base-500">{{ t('overview.settlement.payments') }}: </span>{{ row.count }}
+              </span>
+              <span class="text-right">
+                <span class="md:hidden text-base-500">{{ t('overview.settlement.sales') }}: </span>{{ formatCurrency(row.sales) }}
+              </span>
+              <span class="md:text-right">
+                <span class="md:hidden text-base-500">{{ t('overview.settlement.donations') }}: </span>{{ formatCurrency(row.donations) }}
+              </span>
+              <span class="text-right">
+                <span class="md:hidden text-base-500">{{ t('overview.settlement.fees') }}: </span>−{{ formatCurrency(row.fees_actual + row.fees_estimated) }}
+              </span>
+              <span class="col-span-2 md:col-span-1 text-right font-bold">
+                <span class="md:hidden text-base-500 font-normal">{{ t('overview.settlement.payout') }}: </span>{{ formatCurrency(row.payout) }}
+              </span>
+              <span v-if="row.unknown_fee_count > 0" class="col-span-2 md:col-span-6 text-xs text-base-500">
+                {{ t('overview.settlement.estimatedFees', {
+                  count: row.unknown_fee_count,
+                  amount: formatCurrency(row.fees_estimated),
+                  rate: String(data.card.fee_rate).replace('.', ','),
+                }) }}
+              </span>
+            </li>
+          </ul>
+          <p class="mt-2 text-xs text-base-500">{{ t('overview.settlement.hint') }}</p>
         </div>
 
         <div class="col-span-12 bg-white p-4 rounded-xl shadow-lg">
@@ -345,8 +454,14 @@ import { cachedFetch } from '~/composables/useCachedFetch'
 import { onOfflineDataChanged } from '~/composables/useOfflineQueue'
 import { usePersistedState } from '~/composables/usePersistedState'
 import type { SearchSelectOption } from '~/components/Common/SearchSelect.vue'
+import { useCashRegisterSettings } from '~/composables/useCashRegisterSettings'
+import { usePage } from '~/composables/usePage'
+import { useToast } from '~/composables/useToast'
 
 const { selectedEvent } = useCheckout()
+const { cardConfigured, loadSettings } = useCashRegisterSettings()
+const { setPage } = usePage()
+const toast = useToast()
 const { fachschaftEnabled } = useFachschaftAvailability()
 const { t } = useI18n()
 const { formatCurrency } = useLocaleFormatters()
@@ -379,7 +494,9 @@ interface StandStat {
   orders: number
   quantity: number
   revenue: number
+  revenueCard?: number
   donations: number
+  expectedCash?: number
 }
 
 // Always covers the whole event, independent of the filter.
@@ -427,6 +544,8 @@ const standRows = computed(() => {
       quantity: Number(stand.quantity),
       revenueLabel: formatCurrency(revenue),
       donationsLabel: formatCurrency(Number(stand.donations)),
+      cardLabel: formatCurrency(Number(stand.revenueCard ?? 0)),
+      expectedCashLabel: formatCurrency(Number(stand.expectedCash ?? revenue)),
       barPercent: max > 0 ? Math.max(revenue > 0 ? 1 : 0, revenue / max * 100) : 0,
     }
   })
@@ -447,6 +566,33 @@ const showVouchers = computed(() => Boolean(vouchers.value && (
   vouchers.value.sold.count > 0
   || vouchers.value.redeemed.totalQuantity > 0
   || vouchers.value.outstanding.length > 0)))
+
+// Card figures only matter where card payments exist (SumUp set up, or past card sales).
+const showCard = computed(() => Boolean(data.value?.expectedCash) && (
+  cardConfigured.value
+  || Number(data.value?.card?.payment_count ?? 0) > 0
+  || Number(data.value?.regular?.cardRevenue ?? 0) !== 0))
+const settlement = computed<any[]>(() => data.value?.card?.settlement ?? [])
+const cardProblemCount = computed(() => Number(data.value?.card?.problem_count ?? 0))
+
+const refreshingFees = ref(false)
+async function refreshFees() {
+  if (!selectedEvent.value || refreshingFees.value) return
+  refreshingFees.value = true
+  try {
+    const res = await $fetch<any>('/api/card-payments/refresh-fees', { method: 'POST', body: { event_id: Number(selectedEvent.value) } })
+    if (!res.ok) {
+      toast.error(res.error || t('common.unknownError'))
+      return
+    }
+    toast.info(t('overview.settlement.feesRefreshed', { updated: res.updated, remaining: res.remaining }))
+    await loadOverview()
+  } catch {
+    toast.error(t('common.unknownError'))
+  } finally {
+    refreshingFees.value = false
+  }
+}
 
 const hourly = computed<any[]>(() => data.value?.hourly ?? [])
 const paymentAmounts = computed<Array<{ amount: number, count: number }>>(() => data.value?.payments?.amounts ?? [])
@@ -520,7 +666,10 @@ watch([selectedEvent, overviewStand], () => {
   loadOverview()
 })
 
-onMounted(loadOverview)
+onMounted(() => {
+  loadOverview()
+  loadSettings()
+})
 onRefresh(loadOverview)
 onOfflineDataChanged(loadOverview)
 </script>

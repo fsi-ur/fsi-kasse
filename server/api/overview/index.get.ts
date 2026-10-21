@@ -2,7 +2,9 @@ import { defineEventHandler, getQuery } from 'h3'
 import { query } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
-import { cashAmountSql } from '~/server/utils/checkout'
+import { cashAmountSql, paymentMethodFilterSql } from '~/server/utils/checkout'
+import { getCashRegisterSettings } from '~/server/utils/appSettings'
+import { loadCardOverview } from '~/server/utils/cardOverview'
 import { loadVoucherOverview } from '~/server/utils/voucherOverview'
 import { loadDepositOverview } from '~/server/utils/deposits'
 
@@ -94,13 +96,16 @@ export default defineEventHandler(async (event) => {
   const itemsRevenue = regularItems.reduce((sum: number, item: any) => sum + Number(item.revenue), 0)
 
   const revenueRows = normalizeBigInt(await query(`
-    SELECT IFNULL(SUM(${cashAmountSql()}), 0) AS revenue
+    SELECT o.payment_method, IFNULL(SUM(${cashAmountSql()}), 0) AS revenue
     FROM orders o
     JOIN order_items oi ON o.id = oi.order_id
     WHERE o.fachschaft = 0
       AND o.event_id = ?${stand.orders}
-  `, [eventId, ...stand.params]))
-  const totalRevenue = Number(revenueRows[0]?.revenue ?? 0)
+    GROUP BY o.payment_method
+  `, [eventId, ...stand.params])) as Array<{ payment_method: string, revenue: unknown }>
+  const revenueByMethod = { cash: 0, card: 0 }
+  for (const row of revenueRows) revenueByMethod[row.payment_method === 'card' ? 'card' : 'cash'] += Number(row.revenue ?? 0)
+  const totalRevenue = revenueByMethod.cash + revenueByMethod.card
 
   // Items given out to the Fachschaft are never paid for — no deposit changes
   // hands either, so the worth is the price only, unlike regular sales.
@@ -139,8 +144,9 @@ export default defineEventHandler(async (event) => {
   const hourly = fillHourlyGaps(hourlyRows)
 
   const paymentRows = await query(`
-    SELECT COUNT(*) AS count, IFNULL(SUM(amount), 0) AS revenue
-    FROM fachschaft_payments
+    SELECT COUNT(*) AS count, IFNULL(SUM(amount), 0) AS revenue,
+      IFNULL(SUM(IF(${paymentMethodFilterSql('p', 'cash')}, amount, 0)), 0) AS cash
+    FROM fachschaft_payments p
     WHERE event_id = ?
   `, [eventId])
 
@@ -154,6 +160,7 @@ export default defineEventHandler(async (event) => {
 
   const paymentCount = Number(paymentRows[0]?.count ?? 0)
   const paymentRevenue = Number(paymentRows[0]?.revenue ?? 0)
+  const paymentCash = Number(paymentRows[0]?.cash ?? 0)
   const paymentAmounts = (paymentAmountRows as any[]).map(row => ({
     amount: Number(row.amount),
     count: Number(row.count),
@@ -187,20 +194,23 @@ export default defineEventHandler(async (event) => {
   const prevHourQuantity = Number(prevHourRows[0]?.quantity ?? 0)
 
   const donationRows = normalizeBigInt(await query(`
-    SELECT COUNT(*) AS count, IFNULL(SUM(amount), 0) AS total
-    FROM donations
+    SELECT COUNT(*) AS count, IFNULL(SUM(amount), 0) AS total,
+      IFNULL(SUM(IF(${paymentMethodFilterSql('d', 'cash')}, amount, 0)), 0) AS cash
+    FROM donations d
     WHERE event_id = ?${stand.donations}
   `, [eventId, ...stand.params]))
 
   const donationCount = Number(donationRows[0]?.count ?? 0)
   const donationTotal = Number(donationRows[0]?.total ?? 0)
+  const donationCash = Number(donationRows[0]?.cash ?? 0)
 
-  const standSalesRows = await query<Array<{ id: unknown, orders: unknown, quantity: unknown, revenue: unknown }>>(`
+  const standSalesRows = await query<Array<{ id: unknown, orders: unknown, quantity: unknown, revenue: unknown, revenue_card: unknown }>>(`
     SELECT
       o.stand_id AS id,
       COUNT(DISTINCT o.id) AS orders,
       SUM(${ITEM_QUANTITY_SQL}) AS quantity,
-      SUM(${cashAmountSql()}) AS revenue
+      SUM(${cashAmountSql()}) AS revenue,
+      SUM(IF(${paymentMethodFilterSql('o', 'card')}, ${cashAmountSql()}, 0)) AS revenue_card
     FROM orders o
     JOIN order_items oi ON oi.order_id = o.id
     WHERE o.fachschaft = 0
@@ -208,9 +218,9 @@ export default defineEventHandler(async (event) => {
     GROUP BY o.stand_id
   `, [eventId])
 
-  const standDonationRows = await query<Array<{ id: unknown, total: unknown }>>(`
-    SELECT stand_id AS id, SUM(amount) AS total
-    FROM donations
+  const standDonationRows = await query<Array<{ id: unknown, total: unknown, card: unknown }>>(`
+    SELECT stand_id AS id, SUM(amount) AS total, SUM(IF(${paymentMethodFilterSql('d', 'card')}, amount, 0)) AS card
+    FROM donations d
     WHERE event_id = ?
     GROUP BY stand_id
   `, [eventId])
@@ -225,12 +235,26 @@ export default defineEventHandler(async (event) => {
     orders: number
     quantity: number
     revenue: number
+    revenueCard: number
     donations: number
+    donationsCard: number
+    /** Cash that should be in this stand's drawer: cash sales and cash donations. */
+    expectedCash: number
   }>()
   const standEntry = (id: number | null) => {
     let entry = standsById.get(id)
     if (!entry) {
-      entry = { id, name: id == null ? null : (standNames.get(id) ?? null), orders: 0, quantity: 0, revenue: 0, donations: 0 }
+      entry = {
+        id,
+        name: id == null ? null : (standNames.get(id) ?? null),
+        orders: 0,
+        quantity: 0,
+        revenue: 0,
+        revenueCard: 0,
+        donations: 0,
+        donationsCard: 0,
+        expectedCash: 0,
+      }
       standsById.set(id, entry)
     }
     return entry
@@ -241,15 +265,25 @@ export default defineEventHandler(async (event) => {
     entry.orders = Number(row.orders ?? 0)
     entry.quantity = Number(row.quantity ?? 0)
     entry.revenue = Number(row.revenue ?? 0)
+    entry.revenueCard = Number(row.revenue_card ?? 0)
   }
   for (const row of standDonationRows) {
-    standEntry(standKey(row.id)).donations = Number(row.total ?? 0)
+    const entry = standEntry(standKey(row.id))
+    entry.donations = Number(row.total ?? 0)
+    entry.donationsCard = Number(row.card ?? 0)
+  }
+  for (const entry of standsById.values()) {
+    entry.expectedCash = (entry.revenue - entry.revenueCard) + (entry.donations - entry.donationsCard)
   }
 
   const stands = [...standsById.values()].sort((a, b) => b.revenue - a.revenue)
 
   const vouchers = await loadVoucherOverview(eventId, stand)
   const deposits = await loadDepositOverview(eventId, stand)
+  const card = await loadCardOverview(eventId, (await getCashRegisterSettings()).card_fee_rate)
+
+  // Fachschaft payments have no stand, so they only count towards the drawer of the whole event.
+  const includesPayments = stand.params.length === 0 && stand.orders === ''
 
   return {
     ok: true,
@@ -257,7 +291,16 @@ export default defineEventHandler(async (event) => {
       items: regularItems,
       itemsRevenue,
       totalRevenue,
+      cashRevenue: revenueByMethod.cash,
+      cardRevenue: revenueByMethod.card,
     },
+    expectedCash: {
+      total: revenueByMethod.cash + donationCash + (includesPayments ? paymentCash : 0),
+      orders: revenueByMethod.cash,
+      donations: donationCash,
+      payments: includesPayments ? paymentCash : null,
+    },
+    card,
     vouchers,
     deposits,
     fachschaft: {
@@ -268,11 +311,15 @@ export default defineEventHandler(async (event) => {
     payments: {
       count: paymentCount,
       revenue: paymentRevenue,
+      cash: paymentCash,
+      card: paymentRevenue - paymentCash,
       amounts: paymentAmounts,
     },
     donations: {
       count: donationCount,
       total: donationTotal,
+      cash: donationCash,
+      card: donationTotal - donationCash,
     },
     stands,
     lastHour: {

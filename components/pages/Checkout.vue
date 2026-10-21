@@ -223,6 +223,7 @@
           </div>
 
           <div v-else-if="donationMode === 'paid'" class="space-y-2">
+            <p v-if="payingByCard" class="text-xs font-medium text-base-600">{{ t('card.paidOnCard') }}</p>
             <div class="flex items-center gap-2">
               <input
                 type="text"
@@ -249,12 +250,42 @@
           </div>
         </div>
 
+        <!-- Payment method: one per order, card only where the stand has a terminal -->
+        <div v-if="cardOffered" class="mt-4 space-y-2">
+          <div class="flex rounded-lg border border-base-300 overflow-hidden text-sm" role="radiogroup" :aria-label="t('card.method')">
+            <button
+              type="button"
+              role="radio"
+              :aria-checked="paymentMethod === 'cash'"
+              class="flex flex-1 items-center justify-center gap-1.5 px-3 py-2 cursor-pointer transition-colors"
+              :class="paymentMethod === 'cash' ? 'bg-accent-500 text-white' : 'bg-white text-base-600 hover:bg-base-50'"
+              @click="paymentMethod = 'cash'"
+            >
+              <Icon name="material-symbols:payments-outline-rounded" class="h-4 w-4" aria-hidden="true" />
+              {{ t('card.cash') }}
+            </button>
+            <button
+              type="button"
+              role="radio"
+              :aria-checked="paymentMethod === 'card'"
+              class="flex flex-1 items-center justify-center gap-1.5 px-3 py-2 border-l border-base-300 transition-colors not-disabled:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              :class="paymentMethod === 'card' ? 'bg-accent-500 text-white' : 'bg-white text-base-600 not-disabled:hover:bg-base-50'"
+              :disabled="Boolean(cardUnavailableReason)"
+              @click="paymentMethod = 'card'"
+            >
+              <Icon name="material-symbols:credit-card-outline" class="h-4 w-4" aria-hidden="true" />
+              {{ t('card.card') }}
+            </button>
+          </div>
+          <p v-if="cardUnavailableReason && cardRelevant" class="text-xs text-base-500">{{ cardUnavailableReason }}</p>
+        </div>
+
         <button
           class="btn-primary mt-4 w-full p-3"
-          :disabled="!canSubmit || !selectedCashier || !selectedEvent || (hasVoucherLines && !isOnline) || submitting"
+          :disabled="!canSubmit || !selectedCashier || !selectedEvent || (hasVoucherLines && !isOnline) || submitting || cardBlocked"
           @click="showConfirm = true"
         >
-          {{ t('checkout.saveOrder') }}
+          {{ payingByCard ? t('card.payWithCard', { amount: formatCurrency(cardChargeAmount) }) : t('checkout.saveOrder') }}
         </button>
       </div>
     </template>
@@ -277,8 +308,21 @@
           ? t('deposit.netPayout', { amount: formatCurrency(-(total + effectiveDonation)) })
           : t('deposit.netDue', { amount: formatCurrency(total + effectiveDonation) }) }}
       </span>
+      <span v-if="payingByCard" class="mt-2 block font-bold text-accent-700">
+        {{ t('card.confirmCharge', { amount: formatCurrency(cardChargeAmount) }) }}
+      </span>
+      <span v-else-if="cardOffered" class="mt-2 block text-base-600">{{ t('card.confirmCash') }}</span>
     </template>
   </FormConfirmation>
+
+  <CardPaymentModal
+    kind="checkout"
+    :back-label="t('card.modal.backToCart')"
+    @retry-card="retryCard"
+    @pay-cash="payCashInstead"
+    @back="cardPayment.dismiss()"
+    @acknowledge="acknowledgeCardPayment"
+  />
 
   <VoucherScanModal
     v-model="showScan"
@@ -314,6 +358,8 @@ import { createClientUuid } from '~/utils/network'
 import { isVoucherLineKind, lineCashTotal, lineWorth } from '~/utils/lineTotal'
 import { formatVoucherCode } from '~/utils/voucherCode'
 import { voucherSparesDepositCash } from '~/utils/voucherDeposit'
+import { useCardAvailability, useCardPayment } from '~/composables/useCardPayment'
+import { usePersistedState } from '~/composables/usePersistedState'
 
 const items = ref<any[]>([])
 const itemsUnavailable = ref(false)
@@ -336,6 +382,8 @@ const toast = useToast()
 const { onRefresh } = useAppRefresh()
 const { submit } = useOfflineQueue()
 const { isOnline } = useConnectivity()
+const cardPayment = useCardPayment()
+const { cardOffered, unavailableReason, loadAvailability } = useCardAvailability()
 
 
 // direct donation input state
@@ -497,8 +545,15 @@ function reconcileCart() {
   if (priceChanged) toast.info(t('checkout.priceUpdated'))
 }
 
-onMounted(loadItems)
-onRefresh(loadItems)
+onMounted(() => {
+  loadItems()
+  loadAvailability()
+  if (cardPayment.active.value?.kind === 'checkout') cardPayment.resume()
+})
+onRefresh(() => {
+  loadItems()
+  loadAvailability(true)
+})
 onOfflineDataChanged(loadItems)
 
 function addToOrder(item: any) {
@@ -575,6 +630,27 @@ const total = computed(() => {
   if (isFachschaft.value) return 0
   return Math.round(orderItems.value.reduce((sum, line) => sum + lineCashTotal(line), 0) * 100) / 100
 })
+
+const paymentMethod = usePersistedState<'cash' | 'card'>('checkoutPaymentMethod', () => 'cash',
+  stored => stored === 'cash' || stored === 'card' ? stored : undefined)
+
+/** What the terminal is asked to charge: the order plus its donation (the tip comes on top, at the terminal). */
+const cardChargeAmount = computed(() => Math.round((total.value + effectiveDonation.value) * 100) / 100)
+
+/** The cart has something to pay, so the card hint is worth showing. */
+const cardRelevant = computed(() => orderItems.value.length > 0 || effectiveDonation.value > 0)
+
+const cardUnavailableReason = computed<string | null>(() => {
+  if (unavailableReason.value) return unavailableReason.value
+  // Payouts are always cash, so is a free order without donation.
+  if (total.value < 0) return t('card.unavailable.payout')
+  if (cardRelevant.value && cardChargeAmount.value <= 0) return t('card.unavailable.nothingToCharge')
+  return null
+})
+
+const payingByCard = computed(() => cardOffered.value && paymentMethod.value === 'card')
+
+const cardBlocked = computed(() => payingByCard.value && Boolean(cardUnavailableReason.value))
 
 // "Betrag erhalten" makes no sense when the till pays out.
 watch([() => orderItems.value.length, isFachschaft, () => total.value < 0], ([count, fachschaft, payout]) => {
@@ -809,34 +885,37 @@ async function finishOrder() {
   if (submitting.value) return
   submitting.value = true
   try {
-    await bookOrder()
+    if (payingByCard.value) await payByCard()
+    else await bookOrder()
   } finally {
     submitting.value = false
   }
 }
 
-async function bookOrder() {
-  const withVouchers = hasVoucherLines.value
-  if (withVouchers) {
-    // Vouchers need a live check right before booking; a changed cart goes back to the cashier.
-    try {
-      if (await revalidateVoucherLines()) {
-        toast.info(t('vouchers.cart.changedBeforeSubmit'))
-        return
-      }
-    } catch {
-      toast.error(t('vouchers.offlineBlocked'))
-      return
+/** Vouchers need a live check right before booking; a changed cart goes back to the cashier. */
+async function voucherLinesStillValid() {
+  if (!hasVoucherLines.value) return true
+  try {
+    if (await revalidateVoucherLines()) {
+      toast.info(t('vouchers.cart.changedBeforeSubmit'))
+      return false
     }
+  } catch {
+    toast.error(t('vouchers.offlineBlocked'))
+    return false
   }
+  return true
+}
 
+/** A fresh payload (new client_uuid) for the current cart. */
+function buildPayload(): CheckoutPayload {
   const donation: CheckoutPayload['donation'] = donationMode.value === 'direct' && directAmount.value > 0
     ? { mode: 'direct', amount: directAmount.value }
     : donationMode.value === 'paid' && paidAmount.value > 0
       ? { mode: 'paid', paid_amount: paidAmount.value }
       : null
 
-  const payload: CheckoutPayload = {
+  return {
     client_uuid: createClientUuid(),
     cashier_id: Number(selectedCashier.value),
     event_id: Number(selectedEvent.value),
@@ -859,7 +938,20 @@ async function bookOrder() {
       .map(line => ({ amount: -Number(line.deposit), quantity: line.quantity })),
     donation,
   }
+}
 
+function clearCart() {
+  orderItems.value = []
+  voucherInfo.value = {}
+  isFachschaft.value = false
+  setDonationMode(null)
+}
+
+async function bookOrder() {
+  const withVouchers = hasVoucherLines.value
+  if (!await voucherLinesStillValid()) return
+
+  const payload = buildPayload()
   const summaryParts = orderItems.value.map(describeLine)
   if (effectiveDonation.value > 0) {
     summaryParts.push(`${t('checkout.donationLabel')} ${formatCurrency(effectiveDonation.value)}`)
@@ -892,10 +984,7 @@ async function bookOrder() {
     return
   }
 
-  orderItems.value = []
-  voucherInfo.value = {}
-  isFachschaft.value = false
-  setDonationMode(null)
+  clearCart()
 
   if (outcome.status === 'queued') {
     toast.info(t('offline.savedOffline'))
@@ -908,5 +997,67 @@ async function bookOrder() {
   toast.success(totalMismatch
     ? t('checkout.savedWithTotal', { total: formatCurrency(bookedTotal!) })
     : t('checkout.saved'))
+}
+
+/**
+ * Pushes the cart to the stand's terminal. The server stores the validated
+ * payload and books the order itself once SumUp reports success; until then
+ * the cart stays untouched behind the blocking modal.
+ */
+async function payByCard() {
+  if (cardUnavailableReason.value) {
+    toast.error(cardUnavailableReason.value)
+    return
+  }
+  if (!await voucherLinesStillValid()) return
+
+  const stand = effectiveStand.value
+  const result = await cardPayment.start('checkout', buildPayload(), {
+    standId: stand?.id ?? null,
+    amount: cardChargeAmount.value,
+    standName: stand?.name ?? null,
+    readerName: stand?.card_reader_name ?? null,
+  })
+  if (!result.ok) toast.error(result.error)
+}
+
+watch(() => cardPayment.payment.value, (state) => {
+  if (!state || state.kind !== 'checkout' || state.status !== 'booked') return
+  if (cardPayment.active.value?.client_uuid !== state.client_uuid) return
+  const tip = Number(state.tip_amount ?? 0)
+  clearCart()
+  cardPayment.dismiss()
+  toast.success(tip > 0
+    ? t('card.paidWithTip', { tip: formatCurrency(tip) })
+    : t('card.paid'))
+})
+
+async function retryCard() {
+  cardPayment.dismiss()
+  if (submitting.value) return
+  submitting.value = true
+  try {
+    await payByCard()
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function payCashInstead() {
+  cardPayment.dismiss()
+  paymentMethod.value = 'cash'
+  if (submitting.value) return
+  submitting.value = true
+  try {
+    await bookOrder()
+  } finally {
+    submitting.value = false
+  }
+}
+
+/** The money is taken (booking_failed) or an admin closed it: the payload lives on the server, the cart goes. */
+function acknowledgeCardPayment() {
+  clearCart()
+  cardPayment.dismiss()
 }
 </script>

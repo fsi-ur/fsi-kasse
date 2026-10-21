@@ -7,12 +7,14 @@ interface LocalEventRow {
   ends_at: string
   is_active: number
   fachschaft_enabled: number
+  card_enabled: number
 }
 
 interface LocalEventProxyRow {
   id: number
   accounting_event_id: number
   fachschaft_enabled: number
+  card_enabled: number
 }
 
 interface AccountingEventRow {
@@ -30,6 +32,7 @@ export interface CashRegisterEvent {
   ends_at: string
   is_active: number
   fachschaft_enabled: number
+  card_enabled: number
 }
 
 async function loadAccountingEvents() {
@@ -92,7 +95,7 @@ async function syncConnectedEventProxies(accountingEvents: AccountingEventRow[])
 export async function getCashRegisterEvents(): Promise<CashRegisterEvent[]> {
   if (!isConnectedAccountingMode()) {
     const rows = await query<LocalEventRow[]>(
-      `SELECT id, name, starts_at, ends_at, is_active, fachschaft_enabled
+      `SELECT id, name, starts_at, ends_at, is_active, fachschaft_enabled, card_enabled
        FROM events
        ORDER BY name ASC`,
     )
@@ -104,6 +107,7 @@ export async function getCashRegisterEvents(): Promise<CashRegisterEvent[]> {
       ends_at: String(row.ends_at),
       is_active: Number(row.is_active),
       fachschaft_enabled: Number(row.fachschaft_enabled),
+      card_enabled: Number(row.card_enabled),
     }))
   }
 
@@ -114,7 +118,7 @@ export async function getCashRegisterEvents(): Promise<CashRegisterEvent[]> {
 
   const accountingIds = accountingEvents.map(event => Number(event.id))
   const proxyRows = await query<LocalEventProxyRow[]>(
-    `SELECT id, accounting_event_id, fachschaft_enabled
+    `SELECT id, accounting_event_id, fachschaft_enabled, card_enabled
      FROM events
      WHERE accounting_event_id IN (${accountingIds.map(() => '?').join(',')})`,
     accountingIds,
@@ -122,9 +126,11 @@ export async function getCashRegisterEvents(): Promise<CashRegisterEvent[]> {
 
   const localIdByAccountingId = new Map<number, number>()
   const fachschaftByAccountingId = new Map<number, number>()
+  const cardByAccountingId = new Map<number, number>()
   for (const row of proxyRows) {
     localIdByAccountingId.set(Number(row.accounting_event_id), Number(row.id))
     fachschaftByAccountingId.set(Number(row.accounting_event_id), Number(row.fachschaft_enabled))
+    cardByAccountingId.set(Number(row.accounting_event_id), Number(row.card_enabled))
   }
 
   return accountingEvents.flatMap((accountingEvent) => {
@@ -138,6 +144,7 @@ export async function getCashRegisterEvents(): Promise<CashRegisterEvent[]> {
       ends_at: String(accountingEvent.ends_at),
       is_active: Number(accountingEvent.is_active),
       fachschaft_enabled: fachschaftByAccountingId.get(Number(accountingEvent.id)) ?? 1,
+      card_enabled: cardByAccountingId.get(Number(accountingEvent.id)) ?? 1,
     }]
   })
 }
@@ -147,7 +154,7 @@ export async function getCashRegisterEventById(eventId: number): Promise<CashReg
 
   if (!isConnectedAccountingMode()) {
     const rows = await query<LocalEventRow[]>(
-      `SELECT id, name, starts_at, ends_at, is_active, fachschaft_enabled
+      `SELECT id, name, starts_at, ends_at, is_active, fachschaft_enabled, card_enabled
        FROM events
        WHERE id = ?
        LIMIT 1`,
@@ -163,6 +170,7 @@ export async function getCashRegisterEventById(eventId: number): Promise<CashReg
       ends_at: String(rows[0].ends_at),
       is_active: Number(rows[0].is_active),
       fachschaft_enabled: Number(rows[0].fachschaft_enabled),
+      card_enabled: Number(rows[0].card_enabled),
     }
   }
 

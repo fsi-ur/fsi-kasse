@@ -26,6 +26,16 @@
       />
     </template>
 
+    <template #cell-card="{ item }">
+      <CommonStatusBadge :label="cardSummary(item)" :tone="cardTone(item)" />
+    </template>
+
+    <template v-if="cardConfigured" #extra-actions="{ item }">
+      <button type="button" class="hover:underline cursor-pointer text-info-600" @click="openCardModal(item)">
+        {{ t('card.stand.edit') }}
+      </button>
+    </template>
+
     <template #modal-fields="{ editingItem: entity }">
       <div class="field">
         <div class="flex flex-wrap items-center gap-2">
@@ -70,6 +80,33 @@
       </div>
     </template>
   </PagesSettingsEntityManager>
+
+  <CommonModal
+    v-model="showCardModal"
+    :title="t('card.stand.title', { name: cardStand?.name ?? '' })"
+    @close="closeCardModal"
+  >
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input v-model="cardForm.enabled" type="checkbox" :disabled="cardSaving">
+      <span class="font-medium">{{ t('card.stand.enabled') }}</span>
+    </label>
+
+    <div class="field">
+      <label>{{ t('card.stand.reader') }}</label>
+      <CommonSelectMenu v-model="cardForm.readerId" :options="readerOptions" wrapper-class="relative w-full" />
+      <p v-if="readerOptions.length === 1" class="text-xs text-base-500">{{ t('card.stand.noReaders') }}</p>
+    </div>
+
+    <template #footer>
+      <CommonFormActions
+        :cancel-label="t('actions.cancel')"
+        :submit-label="t('actions.save')"
+        :saving="cardSaving"
+        @cancel="closeCardModal"
+        @submit="saveCard"
+      />
+    </template>
+  </CommonModal>
 </template>
 
 <script setup lang="ts">
@@ -77,6 +114,7 @@ import { ref } from 'vue'
 import { useI18n } from '~/composables/useI18n'
 import { useToast } from '~/composables/useToast'
 import type { EntityManagerColumn, SaveSettingsEntityBody, SettingsEntityRow } from './EntityManager.vue'
+import { useCashRegisterSettings } from '~/composables/useCashRegisterSettings'
 
 interface PickerItem {
   id: number
@@ -97,7 +135,30 @@ const filteredItems = computed(() => {
   return allItems.value.filter(item => item.name.toLowerCase().includes(needle))
 })
 
-const columns: EntityManagerColumn[] = [
+const { cardConfigured } = useCashRegisterSettings()
+
+function cardSummary(item: unknown) {
+  const stand = item as { card_enabled?: boolean, card_reader_name?: string | null, card_reader_ready?: boolean }
+  if (!stand.card_enabled) return t('card.stand.off')
+  if (!stand.card_reader_ready) return t('card.stand.noReader')
+  return stand.card_reader_name ?? t('card.stand.on')
+}
+
+function cardTone(item: unknown) {
+  const stand = item as { card_enabled?: boolean, card_reader_ready?: boolean }
+  if (!stand.card_enabled) return 'baseMuted' as const
+  return stand.card_reader_ready ? 'success' as const : 'warning' as const
+}
+
+const cardColumn: EntityManagerColumn = {
+  key: 'card',
+  label: t('card.stand.column'),
+  filterable: false,
+  sortable: false,
+  getValue: item => cardSummary(item),
+}
+
+const baseColumns: EntityManagerColumn[] = [
   {
     key: 'item_count',
     label: t('stands.itemCount'),
@@ -112,6 +173,75 @@ const columns: EntityManagerColumn[] = [
     getValue: item => item.is_active ? t('common.active') : t('common.inactive'),
   },
 ]
+
+const columns = computed(() => cardConfigured.value ? [baseColumns[0]!, cardColumn, ...baseColumns.slice(1)] : baseColumns)
+
+interface ReaderOption {
+  id: number
+  name: string
+}
+
+const showCardModal = ref(false)
+const cardSaving = ref(false)
+const cardStand = ref<SettingsEntityRow | null>(null)
+const cardForm = ref<{ enabled: boolean, readerId: number | null }>({ enabled: false, readerId: null })
+const readers = ref<ReaderOption[]>([])
+
+const readerOptions = computed(() => [
+  { value: null as number | null, label: t('card.stand.noReaderOption') },
+  ...readers.value.map(reader => ({ value: reader.id as number | null, label: reader.name })),
+])
+
+async function loadReaders() {
+  try {
+    const res = await $fetch<any>('/api/card-readers')
+    if (!res.ok) {
+      toast.error(res.error || t('common.unknownError'))
+      return
+    }
+    readers.value = (res.readers as any[])
+      .filter(reader => reader.is_active && reader.pairing_status === 'paired')
+      .map(reader => ({ id: Number(reader.id), name: String(reader.name) }))
+  } catch {
+    toast.error(t('common.unknownError'))
+  }
+}
+
+function openCardModal(item: SettingsEntityRow) {
+  const stand = item as SettingsEntityRow & { card_enabled?: boolean, card_reader_id?: number | null }
+  cardStand.value = item
+  cardForm.value = { enabled: Boolean(stand.card_enabled), readerId: stand.card_reader_id ?? null }
+  showCardModal.value = true
+  loadReaders()
+}
+
+function closeCardModal() {
+  if (cardSaving.value) return
+  showCardModal.value = false
+  cardStand.value = null
+}
+
+async function saveCard() {
+  if (!cardStand.value) return
+  cardSaving.value = true
+  try {
+    const res = await $fetch<{ ok: boolean, error?: string }>('/api/stands/card', {
+      method: 'POST',
+      body: { id: cardStand.value.id, card_enabled: cardForm.value.enabled, card_reader_id: cardForm.value.readerId },
+    })
+    if (!res.ok) {
+      toast.error(res.error || t('common.unknownError'))
+      return
+    }
+    showCardModal.value = false
+    cardStand.value = null
+    await managerRef.value?.loadItems()
+  } catch {
+    toast.error(t('common.unknownError'))
+  } finally {
+    cardSaving.value = false
+  }
+}
 
 function selectedIds(entity: SaveSettingsEntityBody): number[] {
   return (entity.item_ids as number[] | undefined) ?? []

@@ -57,7 +57,8 @@ CREATE TABLE IF NOT EXISTS events (
   accounting_event_id BIGINT UNSIGNED NULL UNIQUE,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   fachschaft_enabled TINYINT(1) NOT NULL DEFAULT 1,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  card_enabled TINYINT(1) NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS items (
@@ -70,11 +71,26 @@ CREATE TABLE IF NOT EXISTS items (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS card_readers (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  sumup_reader_id VARCHAR(64) NOT NULL UNIQUE,
+  name VARCHAR(255) NOT NULL,
+  device_serial VARCHAR(64) NULL,
+  device_model VARCHAR(32) NULL,
+  pairing_status VARCHAR(16) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  paired_by_affiliation_id BIGINT UNSIGNED NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS stands (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL UNIQUE,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  card_reader_id BIGINT UNSIGNED NULL,
+  card_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  CONSTRAINT fk_stands_card_reader FOREIGN KEY (card_reader_id) REFERENCES card_readers(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS stand_items (
@@ -158,6 +174,7 @@ CREATE TABLE IF NOT EXISTS orders (
   stand_id BIGINT UNSIGNED NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   client_uuid CHAR(36) NULL,
+  payment_method ENUM('cash', 'card') NOT NULL DEFAULT 'cash',
   UNIQUE KEY uq_orders_client_uuid (client_uuid),
   INDEX idx_orders_event_stand (event_id, stand_id),
   FOREIGN KEY (cashier_id) REFERENCES cashiers(id) ON DELETE CASCADE,
@@ -271,6 +288,7 @@ CREATE TABLE IF NOT EXISTS fachschaft_payments (
   amount DECIMAL(10,2) NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   client_uuid CHAR(36) NULL,
+  payment_method ENUM('cash', 'card') NOT NULL DEFAULT 'cash',
   UNIQUE KEY uq_fachschaft_payments_client_uuid (client_uuid),
   FOREIGN KEY (member_id) REFERENCES cashiers(id),
   FOREIGN KEY (cashier_id) REFERENCES cashiers(id),
@@ -286,11 +304,51 @@ CREATE TABLE IF NOT EXISTS donations (
   stand_id BIGINT UNSIGNED NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   client_uuid CHAR(36) NULL,
+  payment_method ENUM('cash', 'card') NOT NULL DEFAULT 'cash',
   UNIQUE KEY uq_donations_client_uuid (client_uuid),
   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
   FOREIGN KEY (cashier_id) REFERENCES cashiers(id) ON DELETE CASCADE,
   FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
   CONSTRAINT fk_donations_stand FOREIGN KEY (stand_id) REFERENCES stands(id)
+);
+
+CREATE TABLE IF NOT EXISTS card_payments (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  client_uuid CHAR(36) NOT NULL UNIQUE,
+  kind ENUM('checkout', 'fachschaft_payment') NOT NULL,
+  status ENUM('created', 'processing', 'successful', 'failed', 'booked', 'booking_failed', 'resolved') NOT NULL,
+  reader_id BIGINT UNSIGNED NOT NULL,
+  event_id BIGINT UNSIGNED NOT NULL,
+  stand_id BIGINT UNSIGNED NULL,
+  cashier_id BIGINT UNSIGNED NOT NULL,
+  payload JSON NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  tip_amount DECIMAL(10,2) NULL,
+  charged_amount DECIMAL(10,2) NULL,
+  fee_amount DECIMAL(10,2) NULL,
+  sumup_client_transaction_id VARCHAR(64) NULL UNIQUE,
+  sumup_transaction_id VARCHAR(64) NULL,
+  sumup_transaction_code VARCHAR(64) NULL,
+  webhook_token CHAR(64) NOT NULL,
+  failure_reason VARCHAR(500) NULL,
+  booking_error VARCHAR(500) NULL,
+  resolution_note VARCHAR(1000) NULL,
+  resolved_by VARCHAR(255) NULL,
+  started_at DATETIME NOT NULL,
+  last_checked_at TIMESTAMP NULL,
+  finalized_at TIMESTAMP NULL,
+  order_id BIGINT UNSIGNED NULL,
+  fachschaft_payment_id BIGINT UNSIGNED NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  sumup_checkout_id VARCHAR(64) NULL,
+  INDEX idx_card_payments_reader_status (reader_id, status),
+  INDEX idx_card_payments_event (event_id, status),
+  CONSTRAINT fk_card_payments_reader FOREIGN KEY (reader_id) REFERENCES card_readers(id),
+  CONSTRAINT fk_card_payments_event FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+  CONSTRAINT fk_card_payments_stand FOREIGN KEY (stand_id) REFERENCES stands(id) ON DELETE SET NULL,
+  CONSTRAINT fk_card_payments_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
+  CONSTRAINT fk_card_payments_fachschaft_payment FOREIGN KEY (fachschaft_payment_id) REFERENCES fachschaft_payments(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS order_change_requests (

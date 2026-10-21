@@ -1,56 +1,13 @@
 import { defineEventHandler, readBody } from 'h3'
-import { query, withTransaction } from '~/server/utils/db'
+import { withTransaction } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
-import { normalizeBigInt } from '~/server/utils/normalize'
-import {
-  bookedTotal,
-  findCommittedCheckout,
-  isDuplicateEntryError,
-  normalizeClientUuid,
-  normalizeLines,
-  resolveBookedLines,
-  round2,
-  validateCashierAndEvent,
-} from '~/server/utils/checkout'
-import { resolveStandId } from '~/server/utils/stands'
-import { normalizeDepositReturns, resolveDepositReturns } from '~/server/utils/deposits'
-import { getCashRegisterEventById } from '~/server/utils/events'
-import { getCashRegisterSettings } from '~/server/utils/appSettings'
-import {
-  applyVoucherDeltas,
-  berlinLocalNow,
-  normalizeVoucherSales,
-  resolveVoucherLines,
-  VoucherBookingError,
-} from '~/server/utils/vouchers'
+import { findCommittedCheckout, isDuplicateEntryError, normalizeClientUuid } from '~/server/utils/checkout'
+import { bookCheckout, isCardPaymentUuid, prepareCheckout } from '~/server/utils/checkoutBooking'
+import { berlinLocalNow, VoucherBookingError } from '~/server/utils/vouchers'
 
-type DonationInput =
-  | null
-  | { mode: 'direct', amount: number }
-  | { mode: 'paid', paid_amount: number }
-
-function parseDonation(value: unknown): DonationInput | undefined {
-  if (value == null) return null
-  const donation = value as Record<string, unknown>
-
-  if (donation.mode === 'direct') {
-    const amount = Number(donation.amount)
-    if (!Number.isFinite(amount) || amount <= 0) return undefined
-    return { mode: 'direct', amount }
-  }
-
-  if (donation.mode === 'paid') {
-    const paidAmount = Number(donation.paid_amount)
-    if (!Number.isFinite(paidAmount) || paidAmount < 0) return undefined
-    return { mode: 'paid', paid_amount: paidAmount }
-  }
-
-  return undefined
-}
-
-// Books a whole checkout (order and optional donation) atomically. Every
+// Books a whole cash checkout (order and optional donation) atomically. Every
 // request carries a client-generated UUID, so the offline queue can replay it
-// safely
+// safely. Card checkouts go through /api/card-payments/start instead.
 export default defineEventHandler(async (event) => {
   const current = await requirePermission(event, 'cash_register.use')
   if (!current.ok) return current
@@ -62,119 +19,25 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'Missing or invalid client_uuid' }
   }
 
+  if (await isCardPaymentUuid(clientUuid)) {
+    return { ok: false, error: 'Diese Bestellung wird bereits per Karte bezahlt' }
+  }
+
   const committed = await findCommittedCheckout(clientUuid)
   if (committed) return committed
 
-  const cashierId = Number(body?.cashier_id)
-  const eventId = Number(body?.event_id)
-  if (!cashierId || !eventId) {
-    return { ok: false, error: 'Missing order details' }
-  }
-
-  const lines = normalizeLines(body?.items)
-  if (!lines) {
-    return { ok: false, error: 'Missing or invalid order items' }
-  }
-
-  const voucherSales = normalizeVoucherSales(body?.voucher_sales)
-  if (!voucherSales) {
-    return { ok: false, error: 'Missing or invalid voucher sales' }
-  }
-
-  const depositReturns = normalizeDepositReturns(body?.deposit_returns)
-  if (!depositReturns) {
-    return { ok: false, error: 'Missing or invalid deposit returns' }
-  }
-
-  const donation = parseDonation(body?.donation)
-  if (donation === undefined) {
-    return { ok: false, error: 'Missing or invalid donation details' }
-  }
-
-  if (lines.length === 0 && voucherSales.length === 0 && depositReturns.length === 0 && !donation) {
-    return { ok: false, error: 'Missing or invalid order items' }
-  }
-
-  const invalid = await validateCashierAndEvent(current.user, cashierId, eventId)
-  if (invalid) return invalid
-
-  const standId = await resolveStandId(body?.stand_id)
-
-  const resolved = await resolveBookedLines(lines)
-  if (!resolved.ok) return resolved
-
-  const returns = await resolveDepositReturns(depositReturns)
-  if (!returns.ok) return returns
-
-  const hasLines = resolved.booked.length > 0 || voucherSales.length > 0 || returns.booked.length > 0
-  const isFachschaft = Boolean(body?.is_fachschaft) && hasLines
-  // A Fachschaft order is free, so a deposit paid back in it would vanish from the total.
-  if (isFachschaft && returns.booked.length > 0) {
-    return { ok: false, error: 'Pfandrückgaben sind in Fachschaftsbestellungen nicht erlaubt' }
-  }
-
-  const vouchers = await resolveVoucherLines({ lines: resolved.booked, sales: voucherSales, isFachschaft })
-  if (!vouchers.ok) return vouchers
-  const booked = [...resolved.booked, ...vouchers.sales, ...returns.booked]
-
-  if (isFachschaft) {
-    const fachschaftEvent = await getCashRegisterEventById(eventId)
-    if (!fachschaftEvent?.fachschaft_enabled || !(await getCashRegisterSettings()).fachschaft_enabled) {
-      return { ok: false, error: 'Fachschaft orders are disabled' }
-    }
-  }
-  const total = bookedTotal(booked, isFachschaft)
-
-  const donationAmount = !donation
-    ? 0
-    : donation.mode === 'direct'
-      ? round2(donation.amount)
-      : Math.max(0, round2(donation.paid_amount - total))
-
-  if (booked.length === 0 && donationAmount <= 0) {
-    return { ok: false, error: 'Missing or invalid donation details' }
-  }
+  const prepared = await prepareCheckout(current.user, body)
+  if (!prepared.ok) return prepared
+  const { plan } = prepared
 
   try {
-    const order_id = await withTransaction(async (conn) => {
-      let orderId: number | null = null
+    const { orderId } = await withTransaction(conn => bookCheckout(plan, {
+      clientUuid,
+      paymentMethod: 'cash',
+      at: berlinLocalNow(),
+    }, conn))
 
-      if (booked.length > 0) {
-        const result = await query(
-          `INSERT INTO orders (cashier_id, event_id, stand_id, fachschaft, client_uuid) VALUES (?, ?, ?, ?, ?)`,
-          [cashierId, eventId, standId, isFachschaft ? 1 : 0, clientUuid],
-          conn,
-        )
-
-        orderId = Number(normalizeBigInt((result as any).insertId))
-
-        // Validity is judged by the server's clock and the order's event.
-        await applyVoucherDeltas(vouchers.deltas, { eventId, at: berlinLocalNow() }, conn, orderId)
-
-        for (const line of booked) {
-          await query(
-            `INSERT INTO order_items
-               (order_id, item_id, item_name, quantity, unit_price, unit_deposit, line_kind, voucher_id, voucher_covers_deposit)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [orderId, line.item_id, line.name, line.quantity, line.unit_price, line.unit_deposit,
-              line.line_kind, line.voucher_id, line.voucher_covers_deposit ? 1 : 0],
-            conn,
-          )
-        }
-      }
-
-      if (donationAmount > 0) {
-        await query(
-          `INSERT INTO donations (event_id, cashier_id, stand_id, amount, order_id, client_uuid) VALUES (?, ?, ?, ?, ?, ?)`,
-          [eventId, cashierId, standId, donationAmount.toFixed(2), orderId, clientUuid],
-          conn,
-        )
-      }
-
-      return orderId
-    })
-
-    return { ok: true, order_id, total, lines: booked, donation_amount: donationAmount }
+    return { ok: true, order_id: orderId, total: plan.total, lines: plan.booked, donation_amount: plan.donationAmount }
   } catch (error) {
     if (error instanceof VoucherBookingError) return { ok: false, error: error.message }
     if (!isDuplicateEntryError(error)) throw error

@@ -45,6 +45,13 @@
             />
           </template>
 
+          <template #cell-payment_method="{ row }">
+            <CommonStatusBadge
+              :label="row.payment_method === 'card' ? t('card.card') : t('card.cash')"
+              :tone="row.payment_method === 'card' ? 'base' : 'baseMuted'"
+            />
+          </template>
+
           <!-- Compact cards read as a receipt line, not as a list of table cells. -->
           <template #mobile-title="{ row }">
             {{ entryTitle(row) }} — {{ t('common.total') }}:
@@ -71,6 +78,7 @@
               :label="t('orderChanges.pendingBadge')"
               tone="warning"
             />
+            <CommonStatusBadge v-if="row.payment_method === 'card'" :label="t('card.card')" tone="base" />
           </template>
         </CommonAdvancedTable>
       </CommonPageTableCard>
@@ -93,6 +101,12 @@
       <dd class="text-right">{{ openedOrder.cashier }}</dd>
       <dt class="text-base-500">{{ t('history.stand') }}</dt>
       <dd class="text-right">{{ openedOrder.stand || t('history.noStand') }}</dd>
+      <dt class="text-base-500">{{ t('card.method') }}</dt>
+      <dd class="text-right">{{ openedOrder.payment_method === 'card' ? t('card.card') : t('card.cash') }}</dd>
+      <template v-if="openedOrder.transaction_code">
+        <dt class="text-base-500">{{ t('card.transactionCode') }}</dt>
+        <dd class="text-right font-mono">{{ openedOrder.transaction_code }}</dd>
+      </template>
     </dl>
 
     <ul v-if="openedOrder">
@@ -130,7 +144,12 @@
     </ul>
 
     <div v-if="openedOrder && openedOrder.donation > 0" class="flex justify-between py-2 border-b border-base-200">
-      <span>{{ t('history.donation') }}</span>
+      <span>
+        {{ t('history.donation') }}
+        <span v-if="openedOrder.tip > 0" class="block text-xs text-base-500">
+          {{ t('card.tipIncluded', { tip: formatCurrency(openedOrder.tip) }) }}
+        </span>
+      </span>
       <span>{{ formatCurrency(openedOrder.donation) }}</span>
     </div>
 
@@ -250,6 +269,8 @@ function entryTotal(entry: any) {
 
 // The stand column only appears once an order of this event has a stand
 const hasStands = computed(() => orders.value.some(order => order.stand))
+// Likewise the payment method, once something of this event was paid by card
+const hasCard = computed(() => orders.value.some(order => order.payment_method === 'card'))
 
 const columns = computed<AdvancedTableColumn<any>[]>(() => [
   {
@@ -296,6 +317,14 @@ const columns = computed<AdvancedTableColumn<any>[]>(() => [
       ? t('history.typeDonation')
       : order.is_fachschaft ? t('history.fachschaftBadge') : t('history.typeSale'),
   },
+  ...(hasCard.value
+    ? [{
+        key: 'payment_method',
+        label: t('card.method'),
+        filterable: true,
+        getValue: (order: any) => order.payment_method === 'card' ? t('card.card') : t('card.cash'),
+      }]
+    : []),
 ])
 
 function openOrder(order: any) {

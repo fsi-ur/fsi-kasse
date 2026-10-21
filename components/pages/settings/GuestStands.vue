@@ -36,6 +36,47 @@
         {{ t('myStands.events', { names: currentStand.event_names.join(', ') }) }}
       </p>
 
+      <div v-if="cardConfigured && currentStand" class="space-y-3 rounded-lg border border-base-200 p-3">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-medium text-base-800">{{ t('card.stand.column') }}</span>
+          <CommonStatusBadge
+            :label="currentStand.card_enabled ? t('card.stand.on') : t('card.stand.off')"
+            :tone="currentStand.card_enabled ? 'success' : 'baseMuted'"
+          />
+        </div>
+        <div class="flex flex-wrap items-end gap-2">
+          <div class="field w-64 max-w-full">
+            <label>{{ t('card.stand.reader') }}</label>
+            <CommonSelectMenu
+              :model-value="currentStand.card_reader_id"
+              :options="readerOptions"
+              wrapper-class="relative w-full"
+              trigger-class="py-1.75"
+              @update:model-value="assignReader"
+            />
+          </div>
+          <button type="button" class="btn-secondary" :disabled="busy" @click="openPairModal">
+            + {{ t('card.stand.pairForStand') }}
+          </button>
+          <button
+            v-if="currentReader?.can_remove"
+            type="button"
+            class="btn-outline text-danger-700! border-danger-500!"
+            :disabled="busy"
+            @click="readerToDelete = currentReader"
+          >
+            {{ t('terminals.deleteTitle') }}
+          </button>
+        </div>
+        <div v-if="currentReader && currentReader.pairing_status !== 'paired'" class="flex flex-wrap items-center gap-2 text-sm text-warning-800">
+          <span>{{ t('card.stand.pairing') }}</span>
+          <button type="button" class="btn-secondary inline-flex items-center gap-1.5" :disabled="busy" @click="loadReaders(true)">
+            <Icon name="material-symbols:refresh-rounded" class="h-4 w-4" aria-hidden="true" />
+            {{ t('terminals.refreshStatus') }}
+          </button>
+        </div>
+      </div>
+
       <CommonAdvancedTable
         v-model:search="search"
         :loading="loading"
@@ -121,6 +162,56 @@
       />
     </template>
   </CommonModal>
+
+  <CommonModal v-model="showPairModal" :title="t('terminals.pairTitle')" width-class="max-w-lg" @close="closePairModal">
+    <ol class="list-decimal space-y-1 pl-5 text-sm text-base-700">
+      <li>{{ t('terminals.pairStep1') }}</li>
+      <li>{{ t('terminals.pairStep2') }}</li>
+      <li>{{ t('terminals.pairStep3') }}</li>
+    </ol>
+    <p class="text-sm text-base-600">{{ t('card.stand.pairAssignHint', { stand: currentStand?.name ?? '' }) }}</p>
+
+    <div class="field">
+      <label for="guest-terminal-name">{{ t('common.name') }}</label>
+      <input id="guest-terminal-name" v-model="pairForm.name" class="input" autocomplete="off" :disabled="busy" :placeholder="t('terminals.namePlaceholder')">
+    </div>
+
+    <div class="field">
+      <label for="guest-terminal-code">{{ t('terminals.pairingCode') }}</label>
+      <input
+        id="guest-terminal-code"
+        v-model="pairForm.code"
+        class="input font-mono uppercase tracking-widest"
+        autocomplete="off"
+        autocapitalize="characters"
+        maxlength="9"
+        :disabled="busy"
+      >
+    </div>
+
+    <template #footer>
+      <CommonFormActions
+        :cancel-label="t('actions.cancel')"
+        :submit-label="t('terminals.pair')"
+        :save-disabled="!pairForm.name.trim() || !pairForm.code.trim()"
+        :saving="busy"
+        @cancel="closePairModal"
+        @submit="pair"
+      />
+    </template>
+  </CommonModal>
+
+  <FormConfirmation
+    v-if="readerToDelete"
+    :headline="t('terminals.deleteTitle')"
+    @confirm="confirmDeleteReader"
+    @cancel="readerToDelete = null"
+  >
+    <template #message>
+      {{ t('terminals.deleteQuestion', { name: readerToDelete.name }) }}
+      <span class="mt-2 block">{{ t('terminals.deleteDeviceHint') }}</span>
+    </template>
+  </FormConfirmation>
 </template>
 
 <script setup lang="ts">
@@ -131,12 +222,15 @@ import { useLocaleFormatters } from '~/composables/useLocaleFormatters'
 import { parseCurrencyInput, sanitizeCurrencyInput } from '~/composables/useCurrencyInput'
 import type { AdvancedTableColumn } from '~/composables/useAdvancedTable'
 import type { SearchSelectOption } from '~/components/Common/SearchSelect.vue'
+import { useCashRegisterSettings } from '~/composables/useCashRegisterSettings'
 
 interface OwnStand {
   id: number
   name: string
   item_ids: number[]
   event_names: string[]
+  card_enabled: boolean
+  card_reader_id: number | null
 }
 
 interface StandItem {
@@ -205,6 +299,8 @@ async function load() {
       name: String(stand.name),
       item_ids: (stand.item_ids as unknown[]).map(Number),
       event_names: (stand.event_names as unknown[]).map(String),
+      card_enabled: stand.card_enabled === true,
+      card_reader_id: stand.card_reader_id == null ? null : Number(stand.card_reader_id),
     }))
     items.value = (res.items as any[]).map(item => ({
       id: Number(item.id),
@@ -236,6 +332,90 @@ async function post(url: string, body: Record<string, unknown>) {
     return false
   } finally {
     busy.value = false
+  }
+}
+
+const { cardConfigured, loadSettings } = useCashRegisterSettings()
+
+interface ReaderOption {
+  id: number
+  name: string
+  pairing_status: string
+  is_active: boolean
+  /** Paired by this guest's association, so they may remove it. */
+  can_remove: boolean
+}
+
+const readers = ref<ReaderOption[]>([])
+const currentReader = computed(() => readers.value.find(reader => reader.id === currentStand.value?.card_reader_id) ?? null)
+
+// Only ready terminals can be picked; the stand's own one stays listed while it is still pairing.
+const readerOptions = computed(() => [
+  { value: null as number | null, label: t('card.stand.noReaderOption') },
+  ...readers.value
+    .filter(reader => (reader.is_active && reader.pairing_status === 'paired') || reader.id === currentReader.value?.id)
+    .map(reader => ({ value: reader.id as number | null, label: reader.name })),
+])
+
+async function loadReaders(withStatus = false) {
+  await loadSettings()
+  if (!cardConfigured.value) return
+  try {
+    const res = await $fetch<any>('/api/card-readers', { query: withStatus ? { status: '1' } : undefined })
+    if (res.ok) {
+      readers.value = (res.readers as any[]).map(reader => ({
+        id: Number(reader.id),
+        name: String(reader.name),
+        pairing_status: String(reader.pairing_status),
+        is_active: reader.is_active === true,
+        can_remove: reader.can_remove === true,
+      }))
+    }
+  } catch {
+    // the picker just stays empty
+  }
+}
+
+function assignReader(value: unknown) {
+  if (!currentStand.value) return
+  return post('/api/stands/card-reader', { id: currentStand.value.id, card_reader_id: value ?? null })
+}
+
+const showPairModal = ref(false)
+const pairForm = ref({ name: '', code: '' })
+
+function openPairModal() {
+  pairForm.value = { name: '', code: '' }
+  showPairModal.value = true
+}
+
+function closePairModal() {
+  if (busy.value) return
+  showPairModal.value = false
+}
+
+async function pair() {
+  if (!currentStand.value) return
+  const done = await post('/api/card-readers/pair', {
+    name: pairForm.value.name.trim(),
+    pairing_code: pairForm.value.code.trim(),
+    stand_id: currentStand.value.id,
+  })
+  if (!done) return
+  showPairModal.value = false
+  toast.success(t('terminals.paired'))
+  await loadReaders(true)
+}
+
+const readerToDelete = ref<ReaderOption | null>(null)
+
+async function confirmDeleteReader() {
+  const reader = readerToDelete.value
+  readerToDelete.value = null
+  if (!reader) return
+  if (await post('/api/card-readers/delete', { id: reader.id })) {
+    toast.success(t('terminals.deleted'))
+    await loadReaders()
   }
 }
 
@@ -291,6 +471,11 @@ async function saveItem() {
   }
 }
 
-onMounted(load)
-useAppRefresh().onRefresh(load)
+onMounted(() => {
+  load()
+  loadReaders()
+})
+useAppRefresh().onRefresh(async () => {
+  await Promise.all([load(), loadReaders()])
+})
 </script>

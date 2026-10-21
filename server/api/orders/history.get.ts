@@ -20,6 +20,9 @@ export default defineEventHandler(async (event) => {
       o.id AS order_id,
       o.fachschaft,
       o.created_at,
+      o.payment_method,
+      cp.sumup_transaction_code,
+      cp.tip_amount,
       c.id AS cashier_id,
       c.name AS cashier_name,
       s.name AS stand_name,
@@ -38,6 +41,7 @@ export default defineEventHandler(async (event) => {
     LEFT JOIN items i ON oi.item_id = i.id
     LEFT JOIN vouchers v ON v.id = oi.voucher_id
     LEFT JOIN stands s ON s.id = o.stand_id
+    LEFT JOIN card_payments cp ON cp.client_uuid = o.client_uuid AND cp.status = 'booked'
     WHERE o.event_id = ?
     ORDER BY o.created_at DESC, o.id DESC
   `, [eventId])
@@ -48,11 +52,15 @@ export default defineEventHandler(async (event) => {
       d.order_id,
       d.amount,
       d.created_at,
+      d.payment_method,
+      cp.sumup_transaction_code,
+      cp.tip_amount,
       c.name AS cashier_name,
       s.name AS stand_name
     FROM donations d
     JOIN cashiers c ON d.cashier_id = c.id
     LEFT JOIN stands s ON s.id = d.stand_id
+    LEFT JOIN card_payments cp ON cp.client_uuid = d.client_uuid AND cp.status = 'booked'
     WHERE d.event_id = ?
   `, [eventId])) as any[]
 
@@ -71,6 +79,9 @@ export default defineEventHandler(async (event) => {
         is_fachschaft: 0,
         created_at: row.created_at,
         donation: Number(row.amount),
+        payment_method: row.payment_method ?? 'cash',
+        transaction_code: row.sumup_transaction_code ?? null,
+        tip: row.tip_amount == null ? 0 : Number(row.tip_amount),
         items: []
       })
     }
@@ -96,6 +107,9 @@ export default defineEventHandler(async (event) => {
         is_fachschaft: row.fachschaft,
         created_at: row.created_at,
         donation: donationByOrder.get(row.order_id) ?? 0,
+        payment_method: row.payment_method ?? 'cash',
+        transaction_code: row.sumup_transaction_code ?? null,
+        tip: row.tip_amount == null ? 0 : Number(row.tip_amount),
         change_request: changeRequestByOrder.get(row.order_id) ?? null,
         items: []
       }

@@ -154,6 +154,49 @@ from the plain CSV export above. It requires `cash_register.manage`.
   accounting database) are left untouched. Session tokens are never included
   in a snapshot; restoring in standalone mode logs everyone out.
 
+### Card payments (SumUp)
+
+The till takes card payments on SumUp Solo terminals through SumUp's Cloud
+API. The server pushes the amount to the stand's terminal and books the order
+itself once SumUp reports the payment as successful.
+
+Setup:
+
+1. Set `SUMUP_API_KEY`, `SUMUP_MERCHANT_CODE`, `SUMUP_AFFILIATE_APP_ID`,
+   `SUMUP_AFFILIATE_KEY` and `SUMUP_WEBHOOK_BASE_URL` in `.env` (the webhook
+   URL must be the public HTTPS origin incl. `APP_BASE_URL`). Without them
+   every card UI is hidden.
+2. Settings → Terminals: pair each Solo (on the device: log out, *Connections →
+   API → Connect*, enter the code shown).
+3. Settings → Kasse: switch card payments on, optionally set the three tip
+   rates (SumUp shows exactly three) and the estimated fee rate. Orders that
+   already contain a donation skip the tip screen unless that is opted in.
+4. Settings → Stände: enable card payments per stand and pick its terminal.
+   Guest managers can pair a Solo for one of their own stands (it is assigned
+   right away and joins the shared pool), pick any terminal for their stands
+   and remove the terminals their association paired, but never switch card
+   payments on. Settings → Veranstaltungen can block card per event.
+
+Card is online only; cash keeps the offline queue. Payouts are always cash. A
+payment that SumUp charged but the till could not book (e.g. a voucher was
+redeemed elsewhere in the meantime) ends up as *Buchung fehlgeschlagen* under
+Änderungsanträge → Kartenzahlungen, where an admin re-checks, re-books or
+closes it with a note. Change requests on card orders are never refunded
+automatically; approving one with a price difference requires a note.
+
+All card money goes to the SumUp account configured in `.env`. The Overview shows a settlement
+per stand (card sales + donations/tips − SumUp fees), with card-paid
+Fachschaft payments in a row of their own; fees SumUp has
+not reported yet are estimated with the configured rate and marked
+provisional until "Gebühren aktualisieren" fetches them.
+
+Development: `SUMUP_MODE=mock` simulates a terminal (pairing code `MOCK0001`;
+the amount's last two cent digits pick the outcome: `13` fails, `37` stays
+pending, `50` adds a 10 % tip, `77` is never tapped and fails once the
+60 s terminal window is over, `99` charges a wrong amount). The mock never
+calls the webhook — polling books; `POST /api/sumup/mock-webhook` triggers
+the webhook path by hand.
+
 ## Environment variables
 
 See [.env.example](.env.example) for the full list:
@@ -165,3 +208,4 @@ See [.env.example](.env.example) for the full list:
 - `SESSION_*` — session cookie and lifetime
 - `ADMIN_USERNAME`, `ADMIN_PASSWORD` — admin bootstrap (`scripts/seed-admin.mjs`)
 - `HOST`, `PORT`, `APP_BASE_URL` — Nuxt runtime
+- `SUMUP_*` — card terminals (see *Card payments* above)

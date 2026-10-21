@@ -32,18 +32,23 @@ import SettingsUsers from './settings/Users.vue'
 import SettingsGuests from './settings/Guests.vue'
 import SettingsAffiliations from './settings/Affiliations.vue'
 import SettingsGuestStands from './settings/GuestStands.vue'
+import SettingsTerminals from './settings/Terminals.vue'
+import { useCashRegisterSettings } from '~/composables/useCashRegisterSettings'
 
 defineEmits<{
   (e: 'openMenu'): void
 }>()
 
-type SettingsTab = 'general' | 'cashRegister' | 'items' | 'stands' | 'itemGroups' | 'cashiers' | 'events' | 'users' | 'guests' | 'affiliations' | 'myStands'
+type SettingsTab = 'general' | 'cashRegister' | 'terminals' | 'items' | 'stands' | 'itemGroups' | 'cashiers' | 'events' | 'users' | 'guests' | 'affiliations' | 'myStands'
 
 const currentTab = useState<SettingsTab>('settings-overview-current-tab', () => 'general')
 const { t } = useI18n()
 const { pageMeta, setPage } = usePage()
 const { isOnline } = useConnectivity()
 const { user, hasPermission } = useAuth()
+const { cardConfigured, loaded: settingsLoaded, loadSettings } = useCashRegisterSettings()
+
+onMounted(() => loadSettings())
 
 // Guest managers reach Settings too, but only see `general`, `guests` and their own stands.
 const tabs = computed(() => {
@@ -55,6 +60,7 @@ const tabs = computed(() => {
   return [
     { key: 'general', label: t('settings.tabs.general'), visible: true },
     { key: 'cashRegister', label: t('settings.tabs.cashRegister'), visible: canManage },
+    { key: 'terminals', label: t('settings.tabs.terminals'), visible: canManage && (cardConfigured.value || !settingsLoaded.value) },
     { key: 'items', label: t('settings.tabs.items'), visible: canManage },
     { key: 'stands', label: t('settings.tabs.stands'), visible: canManage },
     { key: 'itemGroups', label: t('settings.tabs.itemGroups'), visible: canManage },
@@ -77,6 +83,8 @@ const activeComponent = computed(() => {
   switch (currentTab.value) {
     case 'cashRegister':
       return SettingsCashRegister
+    case 'terminals':
+      return SettingsTerminals
     case 'items':
       return SettingsItems
     case 'stands':
