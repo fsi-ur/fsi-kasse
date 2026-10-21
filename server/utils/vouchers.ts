@@ -6,7 +6,7 @@ import { getCashRegisterEventById } from '~/server/utils/events'
 import { groupItemIds } from '~/server/utils/itemGroups'
 import { normalizeHexColor } from '~/utils/voucherColors'
 import { formatVoucherCode, normalizeVoucherCode } from '~/utils/voucherCode'
-import { voucherDepositMode, type VoucherDepositMode } from '~/utils/voucherDeposit'
+import { isVoucherDepositMode, voucherDepositMode, type VoucherDepositMode } from '~/utils/voucherDeposit'
 
 export type VoucherStatus = 'unsold' | 'active' | 'revoked'
 export type VoucherBatchKind = 'paid' | 'free'
@@ -241,6 +241,70 @@ export async function parseEditableBatchFields(body: BatchFieldsInput): Promise<
   }
 
   return { ok: true, fields: { name, note, event_id: eventId, valid_until: validUntil } }
+}
+
+export interface BatchValueFieldsInput {
+  kind?: unknown
+  item_group_id?: unknown
+  units_per_voucher?: unknown
+  sale_price?: unknown
+  deposit_mode?: unknown
+}
+
+export type ParsedBatchValueFields = {
+  kind: VoucherBatchKind
+  item_group_id: number
+  units_per_voucher: number
+  sale_price: number | null
+  deposit_mode: VoucherDepositMode
+}
+
+/**
+ * The fields that decide what a voucher is worth. Set on creation and editable
+ * only while no voucher of the batch is in use (see `batchInUse`). An inactive
+ * item group is only accepted when it is `currentItemGroupId`, i.e. unchanged.
+ */
+export async function parseBatchValueFields(
+  body: BatchValueFieldsInput,
+  conn?: mariadb.PoolConnection,
+  currentItemGroupId?: number,
+): Promise<{ ok: true, fields: ParsedBatchValueFields } | { ok: false, error: string }> {
+  const kind = body.kind
+  if (kind !== 'paid' && kind !== 'free') return { ok: false, error: 'Ungültige Gutscheinart' }
+
+  const itemGroupId = Number(body.item_group_id)
+  if (!Number.isInteger(itemGroupId) || itemGroupId <= 0) return { ok: false, error: 'Bitte eine Artikelgruppe wählen' }
+  const groups = await query<Array<{ id: unknown, is_active: unknown }>>(`SELECT id, is_active FROM item_groups WHERE id = ? LIMIT 1`, [itemGroupId], conn)
+  if (!groups[0]) return { ok: false, error: 'Artikelgruppe nicht gefunden' }
+  if (!Number(groups[0].is_active) && itemGroupId !== currentItemGroupId) return { ok: false, error: 'Die Artikelgruppe ist nicht aktiv' }
+
+  const units = Number(body.units_per_voucher)
+  if (!Number.isInteger(units) || units < 1 || units > MAX_UNITS_PER_VOUCHER) {
+    return { ok: false, error: `Einheiten pro Gutschein müssen zwischen 1 und ${MAX_UNITS_PER_VOUCHER} liegen` }
+  }
+
+  let salePrice: number | null = null
+  if (kind === 'paid') {
+    salePrice = parseSalePrice(body.sale_price)
+    if (salePrice == null) return { ok: false, error: 'Bitte einen gültigen Verkaufspreis größer als 0 eingeben' }
+  } else if (body.sale_price != null && body.sale_price !== '') {
+    return { ok: false, error: 'Kostenlose Gutscheine haben keinen Verkaufspreis' }
+  }
+
+  if (body.deposit_mode != null && !isVoucherDepositMode(body.deposit_mode)) {
+    return { ok: false, error: 'Ungültige Pfandregel' }
+  }
+
+  return {
+    ok: true,
+    fields: {
+      kind,
+      item_group_id: itemGroupId,
+      units_per_voucher: units,
+      sale_price: salePrice,
+      deposit_mode: voucherDepositMode(body),
+    },
+  }
 }
 
 export function parseSalePrice(value: unknown): number | null {

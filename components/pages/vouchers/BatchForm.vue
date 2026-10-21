@@ -22,9 +22,9 @@
           class="rounded-lg border px-3 py-2 text-left text-sm transition-colors"
           :class="[
             form.kind === kind ? 'border-accent-500 bg-accent-50 text-accent-700' : 'border-base-300 bg-white text-base-700',
-            batch ? 'cursor-not-allowed opacity-70' : form.kind === kind ? 'cursor-default' : 'cursor-pointer hover:bg-base-50',
+            valueLocked ? 'cursor-not-allowed opacity-70' : form.kind === kind ? 'cursor-default' : 'cursor-pointer hover:bg-base-50',
           ]"
-          :disabled="!!batch"
+          :disabled="valueLocked"
           @click="form.kind = kind"
         >
           <span class="block font-semibold">{{ kindLabel(kind) }}</span>
@@ -41,7 +41,7 @@
         :placeholder="t('vouchers.form.itemGroupPlaceholder')"
         :empty-text="t('vouchers.form.noItemGroups')"
         :selected-label="selectedGroupLabel"
-        :disabled="!!batch"
+        :disabled="valueLocked"
         @select="form.item_group_id = Number($event); groupQuery = ''"
         @clear-selection="form.item_group_id = null"
       />
@@ -50,7 +50,7 @@
     <div class="grid grid-cols-2 gap-4">
       <div class="field">
         <label>{{ t('vouchers.form.units') }}</label>
-        <input v-model.number="form.units_per_voucher" type="number" min="1" max="999" step="1" class="input" :disabled="!!batch" />
+        <input v-model.number="form.units_per_voucher" type="number" min="1" max="999" step="1" class="input" :disabled="valueLocked" />
       </div>
       <div v-if="form.kind === 'paid'" class="field">
         <label>{{ t('vouchers.form.salePrice') }}</label>
@@ -67,15 +67,15 @@
     </div>
     <p v-if="priceLocked" class="-mt-2 text-xs text-base-500">{{ t('vouchers.form.priceLocked') }}</p>
 
-    <fieldset class="space-y-2" :class="{ 'opacity-70': batch }">
+    <fieldset class="space-y-2" :class="{ 'opacity-70': valueLocked }">
       <legend class="section-title">{{ t('vouchers.depositMode.label') }}</legend>
       <label
         v-for="mode in VOUCHER_DEPOSIT_MODES"
         :key="mode"
         class="flex items-start gap-2 text-sm"
-        :class="batch ? '' : 'cursor-pointer'"
+        :class="valueLocked ? '' : 'cursor-pointer'"
       >
-        <input v-model="form.deposit_mode" type="radio" name="voucher-deposit-mode" :value="mode" class="mt-0.5" :disabled="!!batch" />
+        <input v-model="form.deposit_mode" type="radio" name="voucher-deposit-mode" :value="mode" class="mt-0.5" :disabled="valueLocked" />
         <span>
           {{ t(`vouchers.depositMode.${mode}`) }}
           <span class="block text-xs text-base-500">{{ t(`vouchers.depositMode.${mode}Hint`) }}</span>
@@ -118,7 +118,7 @@
       <textarea v-model="form.note" class="input" rows="2" maxlength="1000" />
     </div>
 
-    <p v-if="batch" class="text-xs text-base-500">{{ t('vouchers.form.immutableHint') }}</p>
+    <p v-if="valueLocked" class="text-xs text-base-500">{{ t('vouchers.form.immutableHint') }}</p>
 
     <template #footer>
       <CommonFormActions
@@ -186,7 +186,9 @@ function emptyForm(): BatchForm {
   return { name: '', kind: 'free', item_group_id: null, units_per_voucher: 1, deposit_mode: 'covered', event_id: null, valid_until: null, note: '', count: 50 }
 }
 
-const priceLocked = computed(() => Boolean(props.batch?.in_use) && form.kind === 'paid')
+// Once a voucher of the batch was sold or redeemed, what a voucher is worth is fixed.
+const valueLocked = computed(() => Boolean(props.batch?.in_use))
+const priceLocked = computed(() => valueLocked.value && form.kind === 'paid')
 
 watch(() => props.modelValue, (open) => {
   if (!open) return
@@ -284,21 +286,15 @@ async function submit() {
       note: form.note.trim() || null,
       event_id: form.event_id,
       valid_until: form.valid_until,
+      kind: form.kind,
+      item_group_id: form.item_group_id,
+      units_per_voucher: form.units_per_voucher,
+      deposit_mode: form.deposit_mode,
       ...(form.kind === 'paid' ? { sale_price: salePrice.value } : {}),
     }
     const res = props.batch
       ? await $fetch<any>('/api/vouchers/batches/update', { method: 'POST', body: { id: props.batch.id, ...common } })
-      : await $fetch<any>('/api/vouchers/batches/create', {
-          method: 'POST',
-          body: {
-            ...common,
-            kind: form.kind,
-            item_group_id: form.item_group_id,
-            units_per_voucher: form.units_per_voucher,
-            deposit_mode: form.deposit_mode,
-            count: form.count,
-          },
-        })
+      : await $fetch<any>('/api/vouchers/batches/create', { method: 'POST', body: { ...common, count: form.count } })
 
     if (!res.ok) {
       toast.error(res.error || t('common.unknownError'))

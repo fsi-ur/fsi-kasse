@@ -2,8 +2,7 @@ import { defineEventHandler, readBody } from 'h3'
 import { query, withTransaction } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
 import { insertVouchers, MAX_VOUCHERS_PER_BATCH } from '~/server/utils/voucherCodes'
-import { MAX_UNITS_PER_VOUCHER, parseEditableBatchFields, parseSalePrice } from '~/server/utils/vouchers'
-import { isVoucherDepositMode, voucherDepositMode } from '~/utils/voucherDeposit'
+import { parseBatchValueFields, parseEditableBatchFields } from '~/server/utils/vouchers'
 
 // Creates a batch together with its vouchers. Free vouchers are usable right
 // away; paid ones are worthless (`unsold`) until sold in a checkout.
@@ -17,37 +16,14 @@ export default defineEventHandler(async (event) => {
   if (!parsed.ok) return parsed
   const fields = parsed.fields
 
-  const kind = body?.kind
-  if (kind !== 'paid' && kind !== 'free') return { ok: false, error: 'Ungültige Gutscheinart' }
-
-  const itemGroupId = Number(body?.item_group_id)
-  if (!Number.isInteger(itemGroupId) || itemGroupId <= 0) return { ok: false, error: 'Bitte eine Artikelgruppe wählen' }
-  const groups = await query<Array<{ id: unknown, is_active: unknown }>>(`SELECT id, is_active FROM item_groups WHERE id = ? LIMIT 1`, [itemGroupId])
-  if (!groups[0]) return { ok: false, error: 'Artikelgruppe nicht gefunden' }
-  if (!Number(groups[0].is_active)) return { ok: false, error: 'Die Artikelgruppe ist nicht aktiv' }
-
-  const units = Number(body?.units_per_voucher)
-  if (!Number.isInteger(units) || units < 1 || units > MAX_UNITS_PER_VOUCHER) {
-    return { ok: false, error: `Einheiten pro Gutschein müssen zwischen 1 und ${MAX_UNITS_PER_VOUCHER} liegen` }
-  }
-
-  let salePrice: number | null = null
-  if (kind === 'paid') {
-    salePrice = parseSalePrice(body?.sale_price)
-    if (salePrice == null) return { ok: false, error: 'Bitte einen gültigen Verkaufspreis größer als 0 eingeben' }
-  } else if (body?.sale_price != null && body.sale_price !== '') {
-    return { ok: false, error: 'Kostenlose Gutscheine haben keinen Verkaufspreis' }
-  }
+  const parsedValue = await parseBatchValueFields(body ?? {})
+  if (!parsedValue.ok) return parsedValue
+  const { kind, item_group_id: itemGroupId, units_per_voucher: units, sale_price: salePrice, deposit_mode: depositMode } = parsedValue.fields
 
   const count = Number(body?.count)
   if (!Number.isInteger(count) || count < 1 || count > MAX_VOUCHERS_PER_BATCH) {
     return { ok: false, error: `Die Anzahl muss zwischen 1 und ${MAX_VOUCHERS_PER_BATCH} liegen` }
   }
-
-  if (body?.deposit_mode != null && !isVoucherDepositMode(body.deposit_mode)) {
-    return { ok: false, error: 'Ungültige Pfandregel' }
-  }
-  const depositMode = voucherDepositMode(body ?? {})
 
   const id = await withTransaction(async (conn) => {
     const result: any = await query(

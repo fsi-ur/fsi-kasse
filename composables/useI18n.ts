@@ -570,7 +570,7 @@ const messages = {
         noExpiry: 'Unbegrenzt',
         count: 'Anzahl Gutscheine',
         note: 'Notiz',
-        immutableHint: 'Art, Artikelgruppe, Einheiten und Pfand können nach dem Anlegen nicht mehr geändert werden.',
+        immutableHint: 'Art, Artikelgruppe, Einheiten und Pfand sind fest, weil bereits Gutscheine dieser Charge verkauft oder eingelöst wurden.',
         create: 'Charge anlegen',
         errors: {
           name: 'Bitte einen Namen eingeben.',
@@ -1660,7 +1660,7 @@ const messages = {
         noExpiry: 'Unlimited',
         count: 'Number of vouchers',
         note: 'Note',
-        immutableHint: 'Kind, item group, units and deposit cannot be changed after creation.',
+        immutableHint: 'Kind, item group, units and deposit are fixed because vouchers of this batch have already been sold or redeemed.',
         create: 'Create batch',
         errors: {
           name: 'Please enter a name.',
