@@ -17,5 +17,5 @@ export const PAGES: Record<string, AppPage> = {
   Overview: { main: true, labelKey: 'pages.overview', component: OverviewPage, icon: 'material-symbols:monitoring-rounded', permissions: ['cash_register.manage'] },
   Vouchers: { main: true, labelKey: 'pages.vouchers', component: VouchersPage, icon: 'material-symbols:confirmation-number-outline-rounded', permissions: ['cash_register.manage'], preserveOnRefresh: true },
   OrderChanges: { main: true, labelKey: 'pages.orderChanges', component: OrderChangesPage, icon: 'material-symbols:edit-note-rounded', permissions: ['cash_register.manage'] },
-  Settings: { main: true, labelKey: 'pages.settings', component: SettingsPage, icon: 'material-symbols:settings-rounded', permissions: ['cash_register.manage', 'cash_register.guest_manage'], preserveOnRefresh: true },
+  Settings: { main: true, labelKey: 'pages.settings', component: SettingsPage, icon: 'material-symbols:settings-rounded', permissions: ['cash_register.use'], preserveOnRefresh: true },
 }

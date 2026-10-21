@@ -136,6 +136,7 @@ import { useToast } from '~/composables/useToast'
 import { useChangePassword } from '~/composables/useChangePassword'
 import { MIN_PASSWORD_LENGTH } from '~/config/validation'
 import { useConnectivity } from '~/composables/useConnectivity'
+import { useOfflineQueue } from '~/composables/useOfflineQueue'
 import type { LogoutAllResponse } from '~/server/api/auth/logout-all.post'
 
 const { setPage } = usePage()
@@ -182,6 +183,12 @@ function confirmLogout() {
 
 async function confirmLogoutAll() {
   if (isLoggingOutAll.value) return
+  // Same guard as `logout()`: unsynced offline sales must be resolved first.
+  if (useOfflineQueue().pendingCount.value > 0) {
+    showLogoutAllConfirm.value = false
+    toast.error(t('offline.logoutBlocked'))
+    return
+  }
 
   isLoggingOutAll.value = true
   try {

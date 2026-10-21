@@ -50,7 +50,8 @@ const { cardConfigured, loaded: settingsLoaded, loadSettings } = useCashRegister
 
 onMounted(() => loadSettings())
 
-// Guest managers reach Settings too, but only see `general`, `guests` and their own stands.
+// Every till user reaches Settings for `general` (language, password, logout);
+// guest managers also see `guests` and their own stands.
 const tabs = computed(() => {
   const canManage = hasPermission('cash_register.manage')
   const canManageGuests = hasPermission('cash_register.guest_manage')
