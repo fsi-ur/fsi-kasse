@@ -29,7 +29,6 @@
     "setup:migrate:cashiers-to-accounting": "node --env-file=.env scripts/migrate-cashiers-to-accounting-members.mjs",
     "setup:migrate:events-to-accounting": "node --env-file=.env scripts/migrate-events-to-accounting.mjs",
     "setup:seed-admin": "node --env-file=.env scripts/seed-admin.mjs",
-    "setup:connection-db-user": "node --env-file=.env scripts/create-connection-db-user.mjs",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {

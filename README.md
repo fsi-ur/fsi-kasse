@@ -64,29 +64,30 @@ The app runs in one of two modes, controlled by `ACCOUNTING_MODE`:
   from the FSi Buchhaltung database (`ACCOUNTING_DB_*` variables). Cashiers and
   events are read-only proxies of accounting members/events.
 
-### Connection database users
+In connected mode, run `npm run setup:connection-db-user` in the buchhaltung
+and point `ACCOUNTING_DB_USER` / `ACCOUNTING_DB_PASSWORD` here at the
+restricted user it creates in the accounting database.
 
-Each application creates the restricted user for the *other* application in
-its own database:
+### Integration API (Buchhaltung cash register tab)
 
-```bash
-npm run setup:connection-db-user
-```
+The buchhaltung's per-event cash register tab does not read this database. It
+calls `GET /api/integration/v1/events/<accounting event id>/overview` from its
+server (`?locale=de|en`, optional `standId`), authenticated with
+`Authorization: Bearer <INTEGRATION_API_KEY>`. Set the same random value (at
+least 32 characters, e.g. `openssl rand -hex 32`) as `INTEGRATION_API_KEY` here
+and as `CASH_REGISTER_API_KEY` in the buchhaltung. Without the key the API
+answers `Integration API disabled`.
 
-reads `CONNECTION_DB_USER` / `CONNECTION_DB_PASSWORD` from `.env` and creates a
-read-only user in this cash register database (`SELECT` on `events`, `items`,
-`orders`, `order_items`, `fachschaft_payments`, `app_settings`, `donations`,
-the price/setting history tables, `stands`, `item_groups`, `voucher_batches` and
-`vouchers`). Re-run it after updating the till so new tables get granted. The
-buchhaltung uses these credentials as `CASH_REGISTER_DB_USER` /
-`CASH_REGISTER_DB_PASSWORD` for its per-event cash register tab.
+The response describes the overview as generic, already translated building
+blocks (stat tiles, tables, lists, an hourly chart — see
+[server/utils/integration/viewContract.ts](server/utils/integration/viewContract.ts)),
+built in [server/utils/integration/eventOverviewView.ts](server/utils/integration/eventOverviewView.ts)
+from the same figures as the till's own Overview. Changing what the
+buchhaltung shows therefore only needs a till release. A typed `totals` block
+carries the figures the buchhaltung may calculate with.
 
-In the other direction, run the same npm script in the buchhaltung and point
-`ACCOUNTING_DB_USER` / `ACCOUNTING_DB_PASSWORD` here at the user it creates.
-
-The script is idempotent (it re-syncs password and grants) and runs
-automatically inside docker compose; it skips itself when the env variables
-are not set.
+Installs that used the old direct database access can drop the read-only user
+(`DROP USER 'fsi_kasse_connect'@'%'`); nothing uses it anymore.
 
 ### Permissions
 
@@ -205,6 +206,7 @@ See [.env.example](.env.example) for the full list:
 - `ACCOUNTING_MODE`, `ACCOUNTING_DB_*` — connected mode database
 - `ACCOUNTING_SESSION_COOKIE_NAME`, `ACCOUNTING_APP_ORIGINS` — connected mode
   access from the Buchhaltung
+- `INTEGRATION_API_KEY` — shared secret for the Buchhaltung's integration API
 - `SESSION_*` — session cookie and lifetime
 - `ADMIN_USERNAME`, `ADMIN_PASSWORD` — admin bootstrap (`scripts/seed-admin.mjs`)
 - `HOST`, `PORT`, `APP_BASE_URL` — Nuxt runtime

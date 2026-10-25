@@ -32,8 +32,12 @@ services:
     expose:
       - "3001"
     networks:
-      - default
-      - fsi-shared
+      default:
+      fsi-shared:
+        # The buchhaltung calls the integration API at http://kasse-app:3001
+        # (both apps' services are named "app" on the shared network).
+        aliases:
+          - kasse-app
     command: sh -c "rm -rf .output .nuxt node_modules/.cache/nuxt && npm ci && npm run setup:deploy && npm run build && npm run start"
     depends_on:
       db:
