@@ -215,8 +215,9 @@
               {{ formatCurrency(data.regular.totalRevenue + data.donations.total) }}
             </div>
             <div class="mt-1 text-sm text-base-500">
-              {{ t('overview.totalIncomeStandBreakdown', {
-                sales: formatCurrency(data.regular.totalRevenue),
+              {{ t(showDeposits ? 'overview.totalIncomeStandBreakdownDeposits' : 'overview.totalIncomeStandBreakdown', {
+                sales: formatCurrency(incomeSales),
+                deposits: formatCurrency(incomeDeposits),
                 donations: formatCurrency(data.donations.total)
               }) }}
             </div>
@@ -228,8 +229,9 @@
               {{ formatCurrency(data.regular.totalRevenue + data.payments.revenue + data.donations.total) }}
             </div>
             <div class="mt-1 text-sm text-base-500">
-              {{ t('overview.totalIncomeBreakdown', {
-                sales: formatCurrency(data.regular.totalRevenue),
+              {{ t(showDeposits ? 'overview.totalIncomeBreakdownDeposits' : 'overview.totalIncomeBreakdown', {
+                sales: formatCurrency(incomeSales),
+                deposits: formatCurrency(incomeDeposits),
                 payments: formatCurrency(data.payments.revenue),
                 donations: formatCurrency(data.donations.total)
               }) }}
@@ -559,6 +561,10 @@ const showFachschaft = computed(() =>
 const deposits = computed(() => data.value?.deposits ?? null)
 // Only events where containers with a deposit went out or came back get the card.
 const showDeposits = computed(() => Boolean(deposits.value?.amounts?.length))
+// The income breakdown lists deposit cash apart from sales; a cached response
+// from before the split has no salesRevenue and keeps the deposit in sales.
+const incomeDeposits = computed(() => data.value?.regular.salesRevenue == null ? 0 : Number(data.value.regular.depositRevenue ?? 0))
+const incomeSales = computed(() => data.value?.regular.salesRevenue ?? data.value?.regular.totalRevenue ?? 0)
 
 const vouchers = computed(() => data.value?.vouchers ?? null)
 // Only events that used vouchers (or have open ones for this event) get the card.

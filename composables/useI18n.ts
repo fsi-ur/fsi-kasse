@@ -328,6 +328,7 @@ const messages = {
       donationTotal: 'Spendenbetrag',
       totalIncome: 'Gesamteinnahmen',
       totalIncomeBreakdown: 'Verkäufe {sales} + Fachschaft {payments} + Spenden {donations}',
+      totalIncomeBreakdownDeposits: 'Verkäufe {sales} + Pfand {deposits} + Fachschaft {payments} + Spenden {donations}',
       paymentAmountEach: 'à {amount}',
       mixedPaymentAmounts: 'Enthält Zahlungen mit unterschiedlichen Beträgen',
       standFilter: 'Stand',
@@ -337,6 +338,7 @@ const messages = {
       orders: 'Bestellungen',
       totalIncomeStand: 'Einnahmen des Stands',
       totalIncomeStandBreakdown: 'Verkäufe {sales} + Spenden {donations}',
+      totalIncomeStandBreakdownDeposits: 'Verkäufe {sales} + Pfand {deposits} + Spenden {donations}',
       vouchers: {
         title: 'Gutscheine',
         sold: 'Verkauft ({count})',
@@ -1418,6 +1420,7 @@ const messages = {
       donationTotal: 'Donation amount',
       totalIncome: 'Total income',
       totalIncomeBreakdown: 'Sales {sales} + Fachschaft {payments} + Donations {donations}',
+      totalIncomeBreakdownDeposits: 'Sales {sales} + deposits {deposits} + Fachschaft {payments} + donations {donations}',
       paymentAmountEach: '{amount} each',
       mixedPaymentAmounts: 'Contains payments with different amounts',
       standFilter: 'Stand',
@@ -1427,6 +1430,7 @@ const messages = {
       orders: 'Orders',
       totalIncomeStand: 'Stand income',
       totalIncomeStandBreakdown: 'Sales {sales} + donations {donations}',
+      totalIncomeStandBreakdownDeposits: 'Sales {sales} + deposits {deposits} + donations {donations}',
       vouchers: {
         title: 'Vouchers',
         sold: 'Sold ({count})',

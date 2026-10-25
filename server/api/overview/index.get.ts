@@ -2,7 +2,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import { query } from '~/server/utils/db'
 import { requirePermission } from '~/server/utils/api/guards'
 import { normalizeBigInt } from '~/server/utils/normalize'
-import { cashAmountSql, paymentMethodFilterSql } from '~/server/utils/checkout'
+import { cashAmountSql, paymentMethodFilterSql, round2 } from '~/server/utils/checkout'
 import { getCashRegisterSettings } from '~/server/utils/appSettings'
 import { loadCardOverview } from '~/server/utils/cardOverview'
 import { loadVoucherOverview } from '~/server/utils/voucherOverview'
@@ -75,13 +75,15 @@ export default defineEventHandler(async (event) => {
   }
 
   // All aggregates value the order lines through their own snapshot columns —
-  // items is joined only to prefer the item's current name.
+  // items is joined only to prefer the item's current name. Sales are valued
+  // at the item price only: the deposit is no sale, it is reported in the
+  // deposit overview together with the returns that pay it back.
   const regularRows = normalizeBigInt(await query(`
     SELECT
       oi.item_id AS id,
       COALESCE(MAX(i.name), MAX(oi.item_name)) AS name,
       SUM(oi.quantity) AS quantity,
-      SUM(oi.quantity * (oi.unit_price + oi.unit_deposit)) AS revenue
+      SUM(oi.quantity * oi.unit_price) AS revenue
     FROM orders o
     JOIN order_items oi ON o.id = oi.order_id
     LEFT JOIN items i ON oi.item_id = i.id
@@ -291,6 +293,10 @@ export default defineEventHandler(async (event) => {
       items: regularItems,
       itemsRevenue,
       totalRevenue,
+      /** Order revenue without deposits: item sales and voucher sales. */
+      salesRevenue: round2(totalRevenue - deposits.netCash),
+      /** Deposit cash in the till (taken minus paid back), part of totalRevenue. */
+      depositRevenue: deposits.netCash,
       cashRevenue: revenueByMethod.cash,
       cardRevenue: revenueByMethod.card,
     },
