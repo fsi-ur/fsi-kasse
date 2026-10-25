@@ -277,7 +277,7 @@
               {{ t('card.card') }}
             </button>
           </div>
-          <p v-if="cardUnavailableReason && cardRelevant" class="text-xs text-base-500">{{ cardUnavailableReason }}</p>
+          <p v-if="cardUnavailableReason" class="text-xs text-base-500">{{ cardUnavailableReason }}</p>
         </div>
 
         <button
@@ -637,7 +637,7 @@ const paymentMethod = usePersistedState<'cash' | 'card'>('checkoutPaymentMethod'
 /** What the terminal is asked to charge: the order plus its donation (the tip comes on top, at the terminal). */
 const cardChargeAmount = computed(() => Math.round((total.value + effectiveDonation.value) * 100) / 100)
 
-/** The cart has something to pay, so the card hint is worth showing. */
+/** The cart has something to pay, so "nothing to charge" would be a real blocker (an empty cart is not). */
 const cardRelevant = computed(() => orderItems.value.length > 0 || effectiveDonation.value > 0)
 
 const cardUnavailableReason = computed<string | null>(() => {
