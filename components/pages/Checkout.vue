@@ -287,6 +287,7 @@
         >
           {{ payingByCard ? t('card.payWithCard', { amount: formatCurrency(cardChargeAmount) }) : t('checkout.saveOrder') }}
         </button>
+        <p v-if="selectionHint" class="mt-2 text-xs text-warning-700">{{ selectionHint }}</p>
       </div>
     </template>
   </Page>
@@ -651,6 +652,13 @@ const cardUnavailableReason = computed<string | null>(() => {
 const payingByCard = computed(() => cardOffered.value && paymentMethod.value === 'card')
 
 const cardBlocked = computed(() => payingByCard.value && Boolean(cardUnavailableReason.value))
+
+/** Explains a disabled save button that the cart itself does not explain. */
+const selectionHint = computed(() => {
+  if (!selectedCashier.value) return t('select.cashierRequired')
+  if (!selectedEvent.value) return t('select.eventRequired')
+  return null
+})
 
 // "Betrag erhalten" makes no sense when the till pays out.
 watch([() => orderItems.value.length, isFachschaft, () => total.value < 0], ([count, fachschaft, payout]) => {

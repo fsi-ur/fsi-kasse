@@ -122,6 +122,7 @@
           maxlength="1000"
           :placeholder="t('cardPayments.resolutionPlaceholder')"
         />
+        <p v-if="!note.trim()" class="mt-1 text-xs text-base-500">{{ t('cardPayments.resolutionNoteRequired') }}</p>
       </div>
     </template>
 

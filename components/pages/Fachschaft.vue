@@ -69,6 +69,7 @@
             ? t('card.payWithCard', { amount: formattedAmount })
             : t('fachschaft.markPaid', { amount: formattedAmount }) }}
         </button>
+        <p v-if="selectionHint" class="basis-full text-xs text-warning-700">{{ selectionHint }}</p>
         <p v-if="cardOffered && unavailableReason" class="basis-full text-xs text-base-500">{{ unavailableReason }}</p>
       </div>
 
@@ -201,6 +202,15 @@ const disabledReason = computed(() => {
   if (!settings.value.fachschaft_enabled) return t('fachschaft.disabledGlobal')
   if (!eventFachschaftEnabled.value) return t('fachschaft.disabledEvent')
   return ''
+})
+
+/** Explains a disabled pay button; skipped while the feature itself is off (shown above). */
+const selectionHint = computed(() => {
+  if (disabledReason.value) return null
+  if (!selectedCashier.value) return t('select.cashierRequired')
+  if (!selectedEvent.value) return t('select.eventRequired')
+  if (!selectedMember.value) return t('fachschaft.memberRequired')
+  return null
 })
 
 const formattedAmount = computed(() => formatCurrency(settings.value.fachschaft_payment_amount))
