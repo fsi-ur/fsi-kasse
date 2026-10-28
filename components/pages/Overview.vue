@@ -600,7 +600,9 @@ async function refreshFees() {
   }
 }
 
-const hourly = computed<any[]>(() => data.value?.hourly ?? [])
+// Hours without revenue are skipped — they only stretch the chart; the day
+// label still marks where a new day starts.
+const hourly = computed<any[]>(() => (data.value?.hourly ?? []).filter((entry: any) => Number(entry.revenue) !== 0))
 const paymentAmounts = computed<Array<{ amount: number, count: number }>>(() => data.value?.payments?.amounts ?? [])
 const maxHourlyRevenue = computed(() => hourly.value.reduce((max: number, entry: any) => Math.max(max, Number(entry.revenue)), 0))
 
